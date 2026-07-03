@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>본사 공무 업무 보드</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 드래그 앤 드롭 시각적 효과 */
+        .drag-over { background-color: #f0fdf4 !important; border-color: #22c55e !important; }
+        .dragging { opacity: 0.4; transform: scale(0.98); }
+        
+        /* 메인 테마 색상 */
+        .theme-bg-blue { background-color: #1e3a8a; } /* 진한 파랑 */
+        .theme-text-blue { color: #1e3a8a; }
+        .theme-border-green { border-color: #15803d; } /* 진한 녹색 */
+        .theme-text-green { color: #15803d; }
+        
+        /* 부드러운 전환 효과 */
+        .task-card { transition: all 0.2s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex flex-col font-sans text-slate-800 relative">
+
+    <!-- 💡 [신규] DB 권한 확인 오버레이 (화이트리스트 인증창) -->
+    <div id="authOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[9999]">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center m-4 transform transition-all">
+            <div class="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="shield-check" class="w-8 h-8 theme-text-blue"></i>
+            </div>
+            <h2 class="text-xl font-bold text-slate-800 mb-2">DB 접근 권한 확인</h2>
+            <p id="authMessage" class="text-sm text-slate-600 mb-6 font-medium">안전한 데이터베이스 연동을 위해<br>권한 확인이 필요합니다.</p>
+            
+            <div id="loginBtnDiv">
+                <button onclick="doBoardLogin()" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 hover:border-blue-400 text-slate-700 px-4 py-3 rounded-xl font-bold transition-all shadow-sm">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" class="w-5 h-5">
+                    Google 계정으로 인증
+                </button>
+            </div>
+            
+            <div id="logoutBtnDiv" style="display: none;" class="mt-4">
+                <button onclick="doBoardLogout()" class="text-sm text-slate-400 hover:text-slate-600 underline">다른 계정으로 로그인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b px-6 py-4 flex flex-col sm:flex-row justify-between items-center z-10 gap-4">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-100 p-2 rounded-lg">
+                <i data-lucide="building-2" class="w-6 h-6 theme-text-blue"></i>
+            </div>
+            <h1 class="text-xl font-extrabold text-slate-800 tracking-tight">공무 현장업무 보드</h1>
+        </div>
+        
+        <!-- Task Add Form -->
+        <form id="addTaskForm" class="flex gap-2 w-full sm:w-auto">
+            <input type="text" id="siteInput" list="siteOptions" placeholder="현장명 (예: 평택 신축)" required
+                   class="border border-slate-300 rounded-lg px-4 py-2 w-full sm:w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm">
+            <input type="text" id="taskInput" placeholder="새로운 업무 내용 입력" required
+                   class="border border-slate-300 rounded-lg px-4 py-2 flex-1 sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm">
+            <button type="submit" class="theme-bg-blue hover:bg-blue-900 text-white px-5 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap">
+                <i data-lucide="plus" class="w-4 h-4"></i> 추가
+            </button>
+        </form>
+    </header>
+
+    <!-- 현장명 자동완성을 위한 Datalist (Firebase Sites 컬렉션과 연동됨) -->
+    <datalist id="siteOptions"></datalist>
+
+    <!-- Main Board -->
+    <main class="flex-1 overflow-x-auto p-6">
+        <div class="flex gap-5 min-w-[1100px] h-full" id="board-container">
+            
+            <!-- Column 1: 할 일 -->
+            <div style="flex: 35;" class="flex flex-col bg-slate-100/50 rounded-xl p-3 border border-slate-200">
+                <div class="bg-white text-slate-700 py-3 px-4 rounded-lg font-bold mb-4 shadow-sm border border-slate-200 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors" ondblclick="showColumnSummary('todo', '할 일')" title="더블클릭하여 목록 요약 보기">
+                    <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-slate-400"></div> 할 일</div>
+                    <span class="text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-500" id="cnt-todo">0</span>
+                </div>
+                <div class="flex-1 overflow-y-auto rounded-lg border-2 border-dashed border-transparent transition-colors p-1 task-column" data-status="todo"></div>
+            </div>
+
+            <!-- Column 2: 진행 중 -->
+            <div style="flex: 35;" class="flex flex-col bg-blue-50/50 rounded-xl p-3 border border-blue-100">
+                <div class="bg-white theme-text-blue py-3 px-4 rounded-lg font-bold mb-4 shadow-sm border border-blue-200 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition-colors" ondblclick="showColumnSummary('inprogress', '진행 중')" title="더블클릭하여 목록 요약 보기">
+                    <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-blue-500"></div> 진행 중</div>
+                    <span class="text-xs bg-blue-100 px-2 py-1 rounded-full text-blue-600" id="cnt-inprogress">0</span>
+                </div>
+                <div class="flex-1 overflow-y-auto rounded-lg border-2 border-dashed border-transparent transition-colors p-1 task-column" data-status="inprogress"></div>
+            </div>
+
+            <!-- Column 3: 보류 -->
+            <div style="flex: 15;" class="flex flex-col bg-amber-50/50 rounded-xl p-3 border border-amber-100">
+                <div class="bg-white text-amber-700 py-3 px-4 rounded-lg font-bold mb-4 shadow-sm border border-amber-200 flex justify-between items-center cursor-pointer hover:bg-amber-50 transition-colors" ondblclick="showColumnSummary('hold', '보류')" title="더블클릭하여 목록 요약 보기">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-amber-500"></div> 보류
+                        <button id="btn-toggle-hold" onclick="toggleView(event, 'hold')" class="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 ml-1 transition-colors hidden">전체보기</button>
+                    </div>
+                    <span class="text-xs bg-amber-100 px-2 py-1 rounded-full text-amber-700" id="cnt-hold">0</span>
+                </div>
+                <div class="flex-1 overflow-y-auto rounded-lg border-2 border-dashed border-transparent transition-colors p-1 task-column" data-status="hold"></div>
+            </div>
+
+            <!-- Column 4: 완료 -->
+            <div style="flex: 15;" class="flex flex-col bg-emerald-50/50 rounded-xl p-3 border border-emerald-100">
+                <div class="bg-white text-emerald-700 py-3 px-4 rounded-lg font-bold mb-4 shadow-sm border border-emerald-200 flex justify-between items-center opacity-80 cursor-pointer hover:bg-emerald-50 transition-colors" ondblclick="showColumnSummary('done', '완료')" title="더블클릭하여 목록 요약 보기">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-emerald-500"></div> 완료
+                        <button id="btn-toggle-done" onclick="toggleView(event, 'done')" class="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 ml-1 transition-colors hidden">전체보기</button>
+                    </div>
+                    <span class="text-xs bg-emerald-100 px-2 py-1 rounded-full text-emerald-700" id="cnt-done">0</span>
+                </div>
+                <div class="flex-1 overflow-y-auto rounded-lg border-2 border-dashed border-transparent transition-colors p-1 task-column" data-status="done"></div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- 수정 모달 -->
+    <div id="editModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 transform transition-all">
+            <div class="flex justify-between items-center mb-5">
+                <h2 class="text-xl font-bold text-slate-800">업무 수정</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <input type="hidden" id="editTaskId">
+            
+            <div class="mb-4">
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5">현장명</label>
+                <input type="text" id="editSiteInput" list="siteOptions" class="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none">
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5">업무 내용</label>
+                <textarea id="editTaskInput" class="w-full border border-slate-300 rounded-lg px-4 py-2.5 h-28 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"></textarea>
+            </div>
+            
+            <div class="flex justify-end gap-3">
+                <button onclick="closeModal()" class="px-5 py-2.5 rounded-lg text-slate-600 font-medium hover:bg-slate-100 transition-colors">취소</button>
+                <button onclick="saveEdit()" class="px-5 py-2.5 theme-bg-blue text-white rounded-lg font-medium hover:bg-blue-900 transition-colors shadow-sm">변경사항 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 탭 요약 보기 모달 -->
+    <div id="summaryModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg m-4 transform transition-all flex flex-col max-h-[80vh]">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="list-todo" class="w-5 h-5 theme-text-blue"></i>
+                    <span id="summaryModalTitle">요약</span>
+                </h2>
+                <button onclick="closeSummaryModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="summaryModalContent" class="overflow-y-auto flex-1 pr-2 space-y-4"></div>
+            <div class="mt-4 pt-4 border-t flex justify-end">
+                <button onclick="closeSummaryModal()" class="px-5 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium hover:bg-slate-200 transition-colors">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 빠른 업무 추가 모달 (현장 옆 + 버튼용) -->
+    <div id="quickAddModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm m-4 transform transition-all">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-lg font-bold text-slate-800">빠른 업무 추가</h2>
+                <button onclick="closeQuickAddModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <p id="quickAddSubtitle" class="text-sm font-medium theme-text-green mb-4 pb-2 border-b"></p>
+            
+            <input type="hidden" id="quickAddSite">
+            <input type="hidden" id="quickAddStatus">
+            
+            <div class="mb-5">
+                <textarea id="quickAddTaskInput" tabindex="1" placeholder="이 현장에 추가할 업무 내용을 입력하세요 (Ctrl+Enter 저장)" class="w-full border border-slate-300 rounded-lg px-4 py-3 h-24 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm" onkeydown="if(event.ctrlKey && event.key === 'Enter') { event.preventDefault(); saveQuickAdd(); }"></textarea>
+            </div>
+            
+            <div class="flex justify-end gap-2">
+                <button onclick="closeQuickAddModal()" tabindex="3" class="px-4 py-2 rounded-lg text-slate-600 font-medium hover:bg-slate-100 transition-colors text-sm">취소</button>
+                <button onclick="saveQuickAdd()" tabindex="2" class="px-4 py-2 theme-bg-blue text-white rounded-lg font-medium hover:bg-blue-900 transition-colors shadow-sm text-sm">추가하기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 전역 업무 추가 모달 (단축키 Alt+Q 용) -->
+    <div id="globalAddModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm m-4 transform transition-all">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">새 업무 추가 <span class="bg-slate-100 text-slate-500 text-[11px] px-2 py-0.5 rounded font-normal border border-slate-200 tracking-wider">Alt+Q</span></h2>
+                <button onclick="closeGlobalAddModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-500 mb-1">현장명</label>
+                <input type="text" id="globalAddSite" list="siteOptions" tabindex="1" placeholder="예: 평택 신축" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm font-medium theme-text-green">
+            </div>
+            
+            <div class="mb-5">
+                <label class="block text-xs font-semibold text-slate-500 mb-1">업무 내용</label>
+                <textarea id="globalAddTaskInput" tabindex="2" placeholder="업무 내용을 입력하세요 (Ctrl+Enter 저장)" class="w-full border border-slate-300 rounded-lg px-4 py-3 h-24 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm" onkeydown="if(event.ctrlKey && event.key === 'Enter') { event.preventDefault(); saveGlobalAdd(); }"></textarea>
+            </div>
+            
+            <div class="flex justify-end gap-2">
+                <button onclick="closeGlobalAddModal()" tabindex="4" class="px-4 py-2 rounded-lg text-slate-600 font-medium hover:bg-slate-100 transition-colors text-sm">취소</button>
+                <button onclick="saveGlobalAdd()" tabindex="3" class="px-4 py-2 theme-bg-blue text-white rounded-lg font-medium hover:bg-blue-900 transition-colors shadow-sm text-sm">추가하기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Modular SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, setDoc, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // 💡 Firebase Auth 모듈 임포트
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBhY5W3WxnSscZjVaXE-dP8NEhmElSirnc",
+            authDomain: "labor-yejo-20260306.firebaseapp.com",
+            projectId: "labor-yejo-20260306",
+            storageBucket: "labor-yejo-20260306.firebasestorage.app",
+            messagingSenderId: "1063955788001",
+            appId: "1:1063955788001:web:401e863f4bce218c3787a0",
+            measurementId: "G-32WLRXQJJG"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app); // Auth 초기화
+        const provider = new GoogleAuthProvider();
+
+        lucide.createIcons();
+
+        // UI 요소
+        const authOverlay = document.getElementById('authOverlay');
+        const authMessage = document.getElementById('authMessage');
+        const loginBtnDiv = document.getElementById('loginBtnDiv');
+        const logoutBtnDiv = document.getElementById('logoutBtnDiv');
+
+        let tasks = [];
+        let draggedTaskId = null;
+        let viewState = { hold: false, done: false }; 
+
+        const columns = document.querySelectorAll('.task-column');
+        const datalist = document.getElementById('siteOptions');
+        
+        let unsubscribeTasks = null;
+        let unsubscribeSites = null;
+
+        // ---------------------------------------------------------
+        // 인증(Auth) 및 화이트리스트 검증 로직
+        // ---------------------------------------------------------
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // 로그인 O -> Firestore에서 화이트리스트 조회
+                authMessage.innerHTML = `<span class="text-blue-600">권한을 확인 중입니다...</span>`;
+                loginBtnDiv.style.display = 'none';
+                logoutBtnDiv.style.display = 'none';
+
+                try {
+                    const docRef = doc(db, 'whitelist', user.email);
+                    const docSnap = await getDoc(docRef);
+
+                    if (docSnap.exists() && docSnap.data().allowed === "true") {
+                        // 권한 확인 완료! 오버레이 숨기고 보드 데이터 불러오기
+                        authOverlay.style.opacity = '0';
+                        setTimeout(() => authOverlay.style.display = 'none', 300);
+                        initBoardData(); 
+                    } else {
+                        // 권한 없음
+                        authMessage.innerHTML = `<span class="text-red-500 font-bold">접근 권한이 없습니다.</span><br><span class="text-xs text-slate-500 mt-1 block">ID: ${user.email}</span><br><span class="text-slate-600 text-sm">관리자에게 화이트리스트 등록을 요청하세요.</span>`;
+                        loginBtnDiv.style.display = 'none';
+                        logoutBtnDiv.style.display = 'block';
+                    }
+                } catch (error) {
+                    console.error("규칙 검증 에러:", error);
+                    authMessage.innerHTML = `<span class="text-red-500 font-bold">권한 확인 실패</span><br><span class="text-slate-600 text-sm">보안 규칙에 의해 차단되었습니다.</span>`;
+                    logoutBtnDiv.style.display = 'block';
+                }
+            } else {
+                // 로그인 X -> 오버레이 표시
+                authOverlay.style.display = 'flex';
+                authOverlay.style.opacity = '1';
+                authMessage.innerHTML = `안전한 데이터베이스 연동을 위해<br>권한 확인이 필요합니다.`;
+                loginBtnDiv.style.display = 'block';
+                logoutBtnDiv.style.display = 'none';
+                clearBoardData(); // 데이터 비우기
+            }
+        });
+
+        // HTML 버튼에서 호출할 인증 함수들
+        window.doBoardLogin = async function() {
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                // 💡 [수정됨] 도메인 권한 에러 처리 강화
+                if (error.code === 'auth/unauthorized-domain') {
+                    console.error("승인되지 않은 도메인 에러:", error);
+                    alert("⚠️ 승인되지 않은 도메인입니다.\n\n해결 방법:\n1. Firebase 콘솔 접속\n2. Authentication(인증) 메뉴 이동\n3. 'Settings(설정)' -> 'Authorized domains(승인된 도메인)' 탭 선택\n4. 현재 접속하신 웹페이지의 도메인(예: github.io 등)을 추가해주세요.");
+                } else if(error.code !== 'auth/popup-closed-by-user') {
+                    console.error("로그인 에러:", error);
+                    alert("인증에 실패했습니다: " + error.message);
+                }
+            }
+        };
+
+        window.doBoardLogout = async function() {
+            await signOut(auth);
+            location.reload();
+        };
+
+        // ---------------------------------------------------------
+        // 기존 보드 로직 (인증 성공 시에만 실행되도록 묶음)
+        // ---------------------------------------------------------
+        function initBoardData() {
+            // 이미 구독중이면 중복방지
+            if(unsubscribeTasks) return; 
+
+            unsubscribeTasks = onSnapshot(collection(db, 'tasks'), (snapshot) => {
+                tasks = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                renderBoard(); 
+            });
+
+            unsubscribeSites = onSnapshot(collection(db, 'sites'), (snapshot) => {
+                datalist.innerHTML = '';
+                const sitesData = snapshot.docs.map(doc => doc.data().name).sort();
+                sitesData.forEach(siteName => {
+                    const option = document.createElement('option');
+                    option.value = siteName;
+                    datalist.appendChild(option);
+                });
+            });
+        }
+
+        function clearBoardData() {
+            if(unsubscribeTasks) { unsubscribeTasks(); unsubscribeTasks = null; }
+            if(unsubscribeSites) { unsubscribeSites(); unsubscribeSites = null; }
+            tasks = [];
+            renderBoard();
+        }
+
+        function getNow() {
+            return new Date().toISOString(); 
+        }
+
+        async function ensureSiteExists(siteName) {
+            const cleanSiteName = siteName.trim();
+            if(!cleanSiteName) return;
+            await setDoc(doc(db, 'sites', cleanSiteName), { 
+                name: cleanSiteName,
+                lastUsedAt: getNow()
+            }, { merge: true });
+        }
+
+        async function addTask(site, title) {
+            const now = getNow();
+            await ensureSiteExists(site); 
+            
+            await addDoc(collection(db, 'tasks'), {
+                site: site.trim(),
+                title: title.trim(),
+                status: 'todo',
+                createdAt: now,
+                updatedAt: now,
+                statusChangedAt: now
+            });
+        }
+
+        async function updateTaskStatus(taskId, newStatus) {
+            const task = tasks.find(t => t.id === taskId);
+            if (task && task.status !== newStatus) {
+                const now = getNow();
+                await updateDoc(doc(db, 'tasks', taskId), { 
+                    status: newStatus, 
+                    statusChangedAt: now, 
+                    updatedAt: now 
+                });
+            }
+        }
+
+        async function updateGroupStatus(siteName, fromStatus, toStatus) {
+            if (fromStatus === toStatus) return;
+            
+            const now = getNow();
+            const batch = writeBatch(db); 
+            let hasUpdates = false;
+
+            tasks.forEach(task => {
+                if (task.site === siteName && task.status === fromStatus) {
+                    const taskRef = doc(db, 'tasks', task.id);
+                    batch.update(taskRef, {
+                        status: toStatus,
+                        statusChangedAt: now,
+                        updatedAt: now
+                    });
+                    hasUpdates = true;
+                }
+            });
+            
+            if (hasUpdates) {
+                await batch.commit(); 
+            }
+        }
+
+        async function updateTaskData(taskId, newSite, newTitle) {
+            await ensureSiteExists(newSite); 
+            
+            await updateDoc(doc(db, 'tasks', taskId), { 
+                site: newSite.trim(), 
+                title: newTitle.trim(), 
+                updatedAt: getNow() 
+            });
+        }
+
+        async function deleteTask(taskId) {
+            if(confirm('이 업무를 삭제하시겠습니까?')) {
+                await deleteDoc(doc(db, 'tasks', taskId));
+            }
+        }
+
+        function renderBoard() {
+            const counts = { todo: 0, inprogress: 0, hold: 0, done: 0 };
+
+            columns.forEach(col => {
+                col.innerHTML = '';
+                const status = col.dataset.status;
+                
+                let colTasks = tasks.filter(t => t.status === status);
+                counts[status] = colTasks.length; 
+                
+                const MAX_VISIBLE = 20; 
+                if (status === 'hold' || status === 'done') {
+                    const btn = document.getElementById(`btn-toggle-${status}`);
+                    if (btn) {
+                        if (counts[status] > MAX_VISIBLE) {
+                            btn.style.display = 'inline-block';
+                            btn.classList.remove('hidden');
+                            btn.textContent = viewState[status] ? '접기' : '전체보기';
+                        } else {
+                            btn.style.display = 'none';
+                            btn.classList.add('hidden');
+                        }
+                    }
+                    
+                    if (!viewState[status] && counts[status] > MAX_VISIBLE) {
+                        colTasks.sort((a, b) => new Date(b.statusChangedAt) - new Date(a.statusChangedAt));
+                        colTasks = colTasks.slice(0, MAX_VISIBLE);
+                    }
+                }
+
+                const groupedTasks = colTasks.reduce((acc, task) => {
+                    if (!acc[task.site]) acc[task.site] = [];
+                    acc[task.site].push(task);
+                    return acc;
+                }, {});
+
+                Object.keys(groupedTasks).sort().forEach(siteName => {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'bg-white border-t-4 theme-border-green rounded-lg shadow-sm mb-3 overflow-hidden cursor-grab active:cursor-grabbing';
+                    groupDiv.draggable = true;
+
+                    groupDiv.addEventListener('dragstart', function(e) {
+                        e.stopPropagation(); 
+                        this.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', `group:${siteName}:${status}`);
+                    });
+
+                    groupDiv.addEventListener('dragend', function(e) {
+                        this.classList.remove('dragging');
+                        columns.forEach(col => col.classList.remove('drag-over'));
+                    });
+                    
+                    const groupHeader = document.createElement('div');
+                    groupHeader.className = 'bg-slate-50 border-b border-slate-100 py-1.5 px-3 flex justify-between items-center';
+                    groupHeader.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="map-pin" class="w-3.5 h-3.5 theme-text-green"></i>
+                            <span class="theme-text-green font-bold text-[13px] tracking-wide">${siteName}</span>
+                        </div>
+                        <button onclick="openQuickAddModal('${siteName}', '${status}')" class="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors" title="이 현장에 빠른 추가">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                        </button>
+                    `;
+                    groupDiv.appendChild(groupHeader);
+
+                    const taskListDiv = document.createElement('div');
+                    taskListDiv.className = 'p-2 flex flex-col gap-2 min-h-[30px]';
+
+                    groupedTasks[siteName].forEach(task => {
+                        const taskCard = document.createElement('div');
+                        taskCard.className = 'task-card bg-slate-700 text-white p-3 text-sm rounded-md cursor-grab active:cursor-grabbing shadow flex justify-between items-start group relative border border-slate-600 hover:bg-slate-800';
+                        
+                        if(status === 'done') {
+                            taskCard.className = 'task-card bg-emerald-700/80 text-white p-3 text-sm rounded-md cursor-grab active:cursor-grabbing shadow flex justify-between items-start group relative border border-emerald-600/50 hover:bg-emerald-800/80';
+                        }
+                        
+                        taskCard.draggable = true;
+                        taskCard.dataset.id = task.id;
+                        
+                        const contentDiv = document.createElement('div');
+                        contentDiv.className = 'flex-1 pr-12 pointer-events-none leading-snug';
+                        contentDiv.textContent = task.title;
+                        
+                        const actionsDiv = document.createElement('div');
+                        actionsDiv.className = 'absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 rounded p-1 backdrop-blur-sm';
+                        
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'p-1 text-slate-200 hover:text-white hover:bg-white/20 rounded transition-colors';
+                        editBtn.innerHTML = '<i data-lucide="pen-line" class="w-3.5 h-3.5"></i>';
+                        editBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            openEditModal(task);
+                        };
+
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'p-1 text-slate-200 hover:text-red-400 hover:bg-white/20 rounded transition-colors';
+                        deleteBtn.innerHTML = '<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>';
+                        deleteBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            deleteTask(task.id);
+                        };
+
+                        actionsDiv.appendChild(editBtn);
+                        actionsDiv.appendChild(deleteBtn);
+                        taskCard.appendChild(contentDiv);
+                        taskCard.appendChild(actionsDiv);
+
+                        taskCard.addEventListener('dragstart', handleDragStart);
+                        taskCard.addEventListener('dragend', handleDragEnd);
+
+                        taskListDiv.appendChild(taskCard);
+                    });
+
+                    groupDiv.appendChild(taskListDiv);
+                    col.appendChild(groupDiv);
+                });
+            });
+
+            document.getElementById('cnt-todo').textContent = counts.todo;
+            document.getElementById('cnt-inprogress').textContent = counts.inprogress;
+            document.getElementById('cnt-hold').textContent = counts.hold;
+            document.getElementById('cnt-done').textContent = counts.done;
+
+            lucide.createIcons();
+        }
+
+        function handleDragStart(e) {
+            e.stopPropagation(); 
+            draggedTaskId = this.dataset.id;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', `card:${this.dataset.id}`);
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            columns.forEach(col => col.classList.remove('drag-over'));
+            draggedTaskId = null;
+        }
+
+        columns.forEach(col => {
+            col.addEventListener('dragover', e => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                col.classList.add('drag-over');
+            });
+
+            col.addEventListener('dragleave', e => {
+                col.classList.remove('drag-over');
+            });
+
+            col.addEventListener('drop', e => {
+                e.preventDefault();
+                col.classList.remove('drag-over');
+                
+                const data = e.dataTransfer.getData('text/plain');
+                const newStatus = col.dataset.status;
+                
+                if (data && newStatus) {
+                    if (data.startsWith('card:')) {
+                        const taskId = data.split(':')[1];
+                        updateTaskStatus(taskId, newStatus);
+                    } else if (data.startsWith('group:')) {
+                        const parts = data.split(':');
+                        const siteName = parts[1];
+                        const fromStatus = parts[2];
+                        updateGroupStatus(siteName, fromStatus, newStatus);
+                    }
+                }
+            });
+        });
+
+        document.getElementById('addTaskForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const site = document.getElementById('siteInput').value;
+            const task = document.getElementById('taskInput').value;
+            
+            if (site && task) {
+                addTask(site, task);
+                document.getElementById('taskInput').value = '';
+                document.getElementById('taskInput').focus();
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if(e.key === 'Escape') {
+                if(!document.getElementById('editModal').classList.contains('hidden')) window.closeModal();
+                if(!document.getElementById('summaryModal').classList.contains('hidden')) window.closeSummaryModal();
+                if(!document.getElementById('quickAddModal').classList.contains('hidden')) window.closeQuickAddModal();
+                if(!document.getElementById('globalAddModal').classList.contains('hidden')) window.closeGlobalAddModal();
+            }
+
+            if (e.altKey && (e.code === 'KeyQ')) {
+                e.preventDefault(); 
+                window.openGlobalAddModal();
+            }
+        });
+
+        window.openEditModal = function(task) {
+            document.getElementById('editTaskId').value = task.id;
+            document.getElementById('editSiteInput').value = task.site;
+            document.getElementById('editTaskInput').value = task.title;
+            document.getElementById('editModal').classList.remove('hidden');
+            document.getElementById('editTaskInput').focus();
+        };
+
+        window.closeModal = function() {
+            document.getElementById('editModal').classList.add('hidden');
+        };
+
+        window.saveEdit = function() {
+            const id = document.getElementById('editTaskId').value;
+            const site = document.getElementById('editSiteInput').value;
+            const title = document.getElementById('editTaskInput').value;
+            if(id && site && title) {
+                updateTaskData(id, site, title);
+                window.closeModal();
+            } else {
+                alert('현장명과 업무 내용을 모두 입력해주세요.');
+            }
+        };
+
+        window.showColumnSummary = function(status, statusName) {
+            const modal = document.getElementById('summaryModal');
+            const contentEl = document.getElementById('summaryModalContent');
+            document.getElementById('summaryModalTitle').textContent = `${statusName} 전체 요약`;
+            contentEl.innerHTML = ''; 
+
+            const colTasks = tasks.filter(t => t.status === status);
+            
+            if (colTasks.length === 0) {
+                contentEl.innerHTML = '<div class="text-center py-8 text-slate-500">등록된 업무가 없습니다.</div>';
+            } else {
+                const grouped = colTasks.reduce((acc, task) => {
+                    if (!acc[task.site]) acc[task.site] = [];
+                    acc[task.site].push(task);
+                    return acc;
+                }, {});
+
+                Object.keys(grouped).sort().forEach(site => {
+                    const siteDiv = document.createElement('div');
+                    siteDiv.className = 'mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100';
+                    siteDiv.innerHTML = `<h3 class="font-bold theme-text-green mb-2 flex items-center gap-1 text-sm border-b pb-1"><i data-lucide="building" class="w-4 h-4"></i> ${site} <span class="text-slate-400 text-xs font-normal ml-1">(${grouped[site].length}건)</span></h3>`;
+                    
+                    const ul = document.createElement('ul');
+                    ul.className = 'list-disc list-inside space-y-1 text-sm text-slate-700 ml-1';
+                    grouped[site].forEach(task => {
+                        const li = document.createElement('li');
+                        li.textContent = task.title;
+                        ul.appendChild(li);
+                    });
+                    
+                    siteDiv.appendChild(ul);
+                    contentEl.appendChild(siteDiv);
+                });
+            }
+            modal.classList.remove('hidden');
+            lucide.createIcons();
+        };
+
+        window.closeSummaryModal = function() {
+            document.getElementById('summaryModal').classList.add('hidden');
+        };
+
+        window.toggleView = function(e, status) {
+            e.stopPropagation(); 
+            viewState[status] = !viewState[status];
+            renderBoard(); 
+        };
+
+        window.openQuickAddModal = function(site, status) {
+            document.getElementById('quickAddSite').value = site;
+            document.getElementById('quickAddStatus').value = status;
+            const statusNames = { todo: '할 일', inprogress: '진행 중', hold: '보류', done: '완료' };
+            document.getElementById('quickAddSubtitle').innerHTML = `<strong>${site}</strong> <span class="text-slate-400 text-xs ml-1">상태: ${statusNames[status]}</span>`;
+            
+            const taskInput = document.getElementById('quickAddTaskInput');
+            taskInput.value = '';
+            document.getElementById('quickAddModal').classList.remove('hidden');
+            setTimeout(() => taskInput.focus(), 100);
+        };
+
+        window.closeQuickAddModal = function() {
+            document.getElementById('quickAddModal').classList.add('hidden');
+        };
+
+        window.saveQuickAdd = async function() {
+            const site = document.getElementById('quickAddSite').value;
+            const status = document.getElementById('quickAddStatus').value;
+            const title = document.getElementById('quickAddTaskInput').value.trim();
+
+            if (title) {
+                const now = getNow();
+                await ensureSiteExists(site); 
+                
+                await addDoc(collection(db, 'tasks'), {
+                    site: site,
+                    title: title,
+                    status: status,
+                    createdAt: now,
+                    updatedAt: now,
+                    statusChangedAt: now
+                });
+                
+                window.closeQuickAddModal();
+            } else {
+                alert('업무 내용을 입력해주세요.');
+            }
+        };
+
+        window.openGlobalAddModal = function() {
+            document.getElementById('globalAddModal').classList.remove('hidden');
+            document.getElementById('globalAddSite').value = '';
+            document.getElementById('globalAddTaskInput').value = '';
+            setTimeout(() => document.getElementById('globalAddSite').focus(), 100);
+        };
+
+        window.closeGlobalAddModal = function() {
+            document.getElementById('globalAddModal').classList.add('hidden');
+        };
+
+        window.saveGlobalAdd = async function() {
+            const site = document.getElementById('globalAddSite').value.trim();
+            const title = document.getElementById('globalAddTaskInput').value.trim();
+            
+            if (site && title) {
+                const now = getNow();
+                await ensureSiteExists(site);
+                
+                await addDoc(collection(db, 'tasks'), {
+                    site: site,
+                    title: title,
+                    status: 'todo', 
+                    createdAt: now,
+                    updatedAt: now,
+                    statusChangedAt: now
+                });
+                
+                window.closeGlobalAddModal();
+            } else {
+                alert('현장명과 업무 내용을 모두 입력해주세요.');
+            }
+        };
+
+    </script>
+</body>
+</html>

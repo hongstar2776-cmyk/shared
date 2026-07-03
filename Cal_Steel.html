@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>강재 계산기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* 자동완성 드롭다운 스타일 */
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #d4d4d8;
+            border-top: none;
+            z-index: 99;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: white;
+            border-radius: 0 0 0.375rem 0.375rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .autocomplete-items div {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #e4e4e7;
+            font-size: 0.875rem;
+        }
+        .autocomplete-items div:last-child {
+            border-bottom: none;
+        }
+        .autocomplete-items div:hover {
+            background-color: #f3f4f6;
+        }
+        /* 키보드 방향키 선택 시 활성화 스타일 */
+        .autocomplete-active {
+            background-color: #3b82f6 !important;
+            color: #ffffff;
+        }
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans min-h-screen p-4 md:p-8">
+
+    <!-- 가이드북 모달 팝업 -->
+    <div id="guideModal" class="fixed inset-0 z-[100] hidden bg-black bg-opacity-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    작성요령 및 가이드북
+                </h3>
+                <button onclick="toggleGuide()" class="text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full p-1.5 transition-colors">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto space-y-8 text-sm text-gray-700">
+                <section>
+                    <h4 class="text-base font-semibold text-blue-700 border-b-2 border-blue-100 pb-2 mb-3 flex items-center gap-2">
+                        <span class="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">1</span>
+                        기본 작성 순서
+                    </h4>
+                    <ul class="list-disc list-inside space-y-2 pl-2 marker:text-blue-500">
+                        <li><strong>공사명 및 일괄 로스율:</strong> 상단에 공사명과 일괄 로스율을 입력합니다. 로스율은 한 번 설정하면 리스트의 모든 자재 중량 산출 시 자동 반영됩니다.</li>
+                        <li><strong>위치 및 부재명:</strong> 도면에 표기된 해당 부재의 위치(예: 1F)와 부재 이름(예: G1)을 입력합니다.</li>
+                        <li><strong>항목(강종) 선택:</strong> 산출할 강재의 종류를 고릅니다. <br>
+                            <span class="text-red-500 font-bold ml-4">※ H-beam(built-up) 선택 시:</span> 규격(예: 200*200*8*14)을 입력하면 내장 공식에 의해 단중과 면적이 자동 계산됩니다.</li>
+                        <li><strong>표준단면치수 검색:</strong> 일반 규격의 일부(예: <code class="bg-gray-100 px-1 py-0.5 rounded text-red-500">100</code>)를 입력하면 자동완성 목록이 나옵니다. <span class="text-blue-600 font-medium">방향키(↓, ↑)로 선택 후 Enter</span>를 누르세요.</li>
+                        <li><strong>길이 및 수량 입력:</strong> 해당 부재 1개의 길이(mm)와 갯수(EA)를 입력하고 <span class="bg-gray-800 text-white px-1.5 py-0.5 rounded text-xs">Enter</span> 키를 누르면 리스트에 등록됩니다.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4 class="text-base font-semibold text-indigo-700 border-b-2 border-indigo-100 pb-2 mb-3 flex items-center gap-2">
+                        <span class="bg-indigo-100 text-indigo-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
+                        버튼 기능 안내
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div class="font-bold text-indigo-700 mb-1">📥 JSON 불러오기</div>
+                            <p class="text-gray-600 text-xs">이전에 컴퓨터에 백업해둔 산출서 파일(<code>.json</code>)을 선택하여 이어서 작업할 수 있도록 화면에 복구합니다.</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div class="font-bold text-indigo-700 mb-1">💾 JSON 저장</div>
+                            <p class="text-gray-600 text-xs">현재까지 작성된 내용을 브라우저가 꺼져도 날아가지 않도록 내 컴퓨터에 파일(<code>.json</code>)로 백업 및 다운로드합니다.</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div class="font-bold text-green-700 mb-1">📊 엑셀 내보내기</div>
+                            <p class="text-gray-600 text-xs">최종 산출된 내역을 엑셀 파일(<code>.xlsx</code>)로 다운로드합니다. 엑셀 내부에 단중 및 면적 산출 수식(=길이/1000*수량*단중...)이 그대로 유지됩니다.</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div class="font-bold text-blue-700 mb-1">➕ 리스트에 추가</div>
+                            <p class="text-gray-600 text-xs">입력한 치수 데이터를 바탕으로 중량 및 도장면적을 자동 산출하여 하단 표에 등록합니다.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h4 class="text-base font-semibold text-teal-700 border-b-2 border-teal-100 pb-2 mb-3 flex items-center gap-2">
+                        <span class="bg-teal-100 text-teal-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
+                        기타 및 수정/삭제
+                    </h4>
+                    <ul class="list-disc list-inside space-y-2 pl-2 marker:text-teal-500">
+                        <li>리스트 우측의 <strong class="text-blue-500">파란색 펜 버튼</strong>을 클릭하면 해당 줄의 규격, 길이, 수량을 즉시 수정할 수 있으며 값은 자동 재계산됩니다.</li>
+                        <li>리스트 우측의 <strong class="text-red-500">빨간색 휴지통 버튼</strong>을 클릭하면 해당 줄이 삭제됩니다.</li>
+                        <li>산출되는 <strong>중량(KG)</strong>에는 입력된 로스율(할증)이 포함되며, <strong>단위면적(도장면적)</strong>은 원칙상 정미량(할증 미적용)으로 계산됩니다.</li>
+                    </ul>
+                </section>
+            </div>
+            
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+                <button onclick="toggleGuide()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-sm">
+                    확인 및 닫기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 항목 삭제 확인 모달 -->
+    <div id="deleteConfirmModal" class="fixed inset-0 z-[110] hidden bg-black bg-opacity-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center transform scale-100 transition-transform">
+            <div class="w-16 h-16 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">해당 항목을 삭제하시겠습니까?</h3>
+            <p class="text-sm text-gray-500 mb-6">삭제된 데이터는 복구할 수 없습니다.</p>
+            <div class="flex justify-center gap-3">
+                <button onclick="cancelDelete()" class="px-5 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition-colors">아니오</button>
+                <button onclick="executeDelete()" class="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold transition-colors">예, 삭제합니다</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-[1664px] w-[98%] mx-auto space-y-6">
+        
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl shadow-sm flex items-center gap-3 text-sm font-bold mt-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+            해당 자료는 서버 어디에도 저장되지 않습니다. 반드시 우측 상단의 저장/내보내기 기능을 활용하여 자료 저장을 하셔야합니다.
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div class="flex-1 w-full">
+                <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    강재 계산기
+                    <button onclick="toggleGuide()" class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-full p-1 transition-colors" title="작성요령 및 가이드북 보기">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </button>
+                </h1>
+                
+                <div class="mt-3 flex flex-col md:flex-row items-start md:items-center gap-4">
+                    <div class="flex items-center gap-3 w-full md:w-auto">
+                        <label class="font-medium text-gray-700 whitespace-nowrap">공사명</label>
+                        <input type="text" id="projectName" placeholder="공사명을 입력하세요" class="w-full md:w-64 border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50">
+                    </div>
+                    <div class="flex items-center gap-3 w-full md:w-auto">
+                        <label class="font-medium text-gray-700 whitespace-nowrap">일괄 로스율 (%)</label>
+                        <input type="number" id="globalLossRate" value="3" step="0.1" min="0" onchange="updateGlobalLossRate()"
+                            class="w-24 border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" title="변경 시 전체 리스트에 즉시 반영됩니다.">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 flex-wrap justify-end">
+                <input type="file" id="jsonFileInput" accept=".json" class="hidden" onchange="importFromJson(event)">
+                
+                <button onclick="document.getElementById('jsonFileInput').click()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap" title="저장된 JSON 백업 파일을 불러옵니다.">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                    JSON 불러오기
+                </button>
+                
+                <button onclick="exportToJson()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap" title="현재 상태를 JSON 파일로 저장하여 나중에 다시 불러올 수 있습니다.">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM10 5a1 1 0 011 1v6.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V6a1 1 0 011-1z" clip-rule="evenodd" />
+                    </svg>
+                    JSON 저장
+                </button>
+
+                <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap" title="최종 결과물을 엑셀(Excel)로 다운로드합니다.">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd" />
+                    </svg>
+                    엑셀 내보내기
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center mb-4 border-b pb-2 gap-4">
+                <h2 class="text-lg font-semibold">항목 입력</h2>
+                <!-- 성공 메시지 피드백 영역 -->
+                <span id="addFeedback" class="text-sm text-green-700 font-bold bg-green-100 border border-green-200 px-3 py-1.5 rounded-lg opacity-0 transition-opacity duration-300 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    리스트에 정상적으로 추가되었습니다!
+                </span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-end">
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">위치 (예: 1F)</label>
+                    <input type="text" id="locInput" placeholder="위치 입력" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">부재명 (예: 1SC1)</label>
+                    <input type="text" id="memberInput" placeholder="부재명 입력" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">항목 (강종)</label>
+                    <select id="steelType" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-gray-50">
+                        <option value="H-BEAM">H-BEAM</option>
+                        <option value="H-beam(built-up)">H-beam(built-up)</option>
+                        <option value="C형강">C형강</option>
+                        <option value="I형강">I형강</option>
+                        <option value="ㄷ형강">ㄷ형강</option>
+                        <option value="ㄱ형강">ㄱ형강</option>
+                        <option value="환봉">환봉</option>
+                        <option value="각형강">각형강</option>
+                    </select>
+                </div>
+
+                <div class="relative">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">표준단면치수 검색</label>
+                    <input type="text" id="standardSize" placeholder="예: 100 입력 후 방향키" autocomplete="off"
+                        class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                    <div id="autocomplete-list" class="autocomplete-items hidden"></div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">길이 (mm)</label>
+                    <input type="number" id="lengthInput" placeholder="길이(mm) 입력" step="1" min="0"
+                        class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">수량 (EA)</label>
+                    <input type="number" id="qtyInput" placeholder="수량 입력 (Enter)" value="1" min="1"
+                        class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <button id="addBtn" onclick="addToList()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg font-medium transition-colors shadow-sm whitespace-nowrap flex justify-center items-center gap-1">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        리스트에 추가
+                    </button>
+                </div>
+            </div>
+            
+            <div id="unitInfo" class="mt-4 p-3 bg-blue-50 text-blue-800 text-sm rounded-lg border border-blue-100 hidden">
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left whitespace-nowrap" id="resultTable">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-6 py-3">No.</th>
+                            <th class="px-6 py-3">위치</th>
+                            <th class="px-6 py-3">부재명</th>
+                            <th class="px-6 py-3">항목</th>
+                            <th class="px-6 py-3">표준단면치수</th>
+                            <th class="px-6 py-3 text-right">길이 (mm)</th>
+                            <th class="px-6 py-3 text-right">수량 (EA)</th>
+                            <th class="px-6 py-3 text-right">단위중량 (kg/m)</th>
+                            <th class="px-6 py-3 text-right">로스율 (%)</th>
+                            <th class="px-6 py-3 text-right">중량 (KG)</th>
+                            <th class="px-6 py-3 text-right">단위면적 4면 (M²)</th>
+                            <th class="px-6 py-3 text-right">단위면적 3면 (M²)</th>
+                            <th class="px-6 py-3 text-center">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listBody" class="divide-y divide-gray-200">
+                        <tr id="emptyRow">
+                            <td colspan="13" class="px-6 py-8 text-center text-gray-500">데이터를 입력하여 리스트를 추가해주세요.</td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="bg-gray-100 font-bold border-t-2 border-gray-300">
+                        <!-- 합계 및 집계 렌더링 영역 -->
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 모달 팝업 토글 로직 ---
+        function toggleGuide() {
+            const modal = document.getElementById('guideModal');
+            modal.classList.toggle('hidden');
+        }
+
+        window.addEventListener('click', function(e) {
+            const modal = document.getElementById('guideModal');
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+
+
+        // --- 1. 내장 데이터 (KS 표준) ---
+        const steelData = [
+            // H-BEAM
+            { type: 'H-BEAM', standard: '100*50*5*7', weight: 9.32, area4: 0.390, area3: 0.340 },
+            { type: 'H-BEAM', standard: '100*100*6*8', weight: 17.2, area4: 0.588, area3: 0.488 },
+            { type: 'H-BEAM', standard: '125*60*6*8', weight: 13.2, area4: 0.478, area3: 0.418 },
+            { type: 'H-BEAM', standard: '125*125*6.5*9', weight: 23.8, area4: 0.737, area3: 0.612 },
+            { type: 'H-BEAM', standard: '148*100*6*9', weight: 21.1, area4: 0.684, area3: 0.584 },
+            { type: 'H-BEAM', standard: '150*75*5*7', weight: 14.0, area4: 0.590, area3: 0.515 },
+            { type: 'H-BEAM', standard: '150*100*6*9', weight: 21.1, area4: 0.688, area3: 0.588 },
+            { type: 'H-BEAM', standard: '150*150*7*10', weight: 31.5, area4: 0.886, area3: 0.736 },
+            { type: 'H-BEAM', standard: '175*90*5*8', weight: 18.1, area4: 0.700, area3: 0.610 },
+            { type: 'H-BEAM', standard: '175*175*7.5*11', weight: 40.2, area4: 1.035, area3: 0.860 },
+            { type: 'H-BEAM', standard: '194*150*6*9', weight: 30.6, area4: 0.976, area3: 0.826 },
+            { type: 'H-BEAM', standard: '198*99*4.5*7', weight: 18.2, area4: 0.783, area3: 0.684 },
+            { type: 'H-BEAM', standard: '200*100*5.5*8', weight: 21.3, area4: 0.789, area3: 0.689 },
+            { type: 'H-BEAM', standard: '200*150*6*9', weight: 30.6, area4: 0.988, area3: 0.838 },
+            { type: 'H-BEAM', standard: '200*200*8*12', weight: 49.9, area4: 1.184, area3: 0.984 },
+            { type: 'H-BEAM', standard: '200*204*12*12', weight: 56.2, area4: 1.192, area3: 0.988 },
+            { type: 'H-BEAM', standard: '208*202*10*16', weight: 65.7, area4: 1.204, area3: 1.002 },
+            { type: 'H-BEAM', standard: '244*175*7*11', weight: 44.1, area4: 1.174, area3: 0.999 },
+            { type: 'H-BEAM', standard: '244*252*11*11', weight: 64.4, area4: 1.474, area3: 1.222 },
+            { type: 'H-BEAM', standard: '248*124*5*8', weight: 25.7, area4: 0.982, area3: 0.858 },
+            { type: 'H-BEAM', standard: '248*249*8*13', weight: 66.5, area4: 1.476, area3: 1.227 },
+            { type: 'H-BEAM', standard: '250*125*5*8', weight: 25.5, area4: 0.990, area3: 0.865 },
+            { type: 'H-BEAM', standard: '250*125*6*9', weight: 29.6, area4: 0.988, area3: 0.863 },
+            { type: 'H-BEAM', standard: '250*250*9*14', weight: 72.4, area4: 1.482, area3: 1.232 },
+            { type: 'H-BEAM', standard: '250*255*14*14', weight: 82.2, area4: 1.492, area3: 1.237 },
+            { type: 'H-BEAM', standard: '294*200*8*12', weight: 56.8, area4: 1.372, area3: 1.172 },
+            { type: 'H-BEAM', standard: '294*302*12*12', weight: 84.5, area4: 1.772, area3: 1.470 },
+            { type: 'H-BEAM', standard: '298*149*5.5*8', weight: 32.0, area4: 1.181, area3: 1.032 },
+            { type: 'H-BEAM', standard: '298*201*9*14', weight: 65.4, area4: 1.382, area3: 1.181 },
+            { type: 'H-BEAM', standard: '298*299*9*14', weight: 87.0, area4: 1.774, area3: 1.475 },
+            { type: 'H-BEAM', standard: '300*150*5.5*8', weight: 32.0, area4: 1.189, area3: 1.039 },
+            { type: 'H-BEAM', standard: '300*150*6.5*9', weight: 36.7, area4: 1.187, area3: 1.037 },
+            { type: 'H-BEAM', standard: '300*300*10*15', weight: 94.0, area4: 1.780, area3: 1.480 },
+            { type: 'H-BEAM', standard: '300*305*15*15', weight: 106.0, area4: 1.790, area3: 1.485 },
+            { type: 'H-BEAM', standard: '304*301*11*17', weight: 106.0, area4: 1.790, area3: 1.489 },
+            { type: 'H-BEAM', standard: '310*305*15*20', weight: 130.0, area4: 1.810, area3: 1.505 },
+            { type: 'H-BEAM', standard: '310*310*20*20', weight: 142.0, area4: 1.820, area3: 1.510 },
+            { type: 'H-BEAM', standard: '336*249*8*12', weight: 69.2, area4: 1.652, area3: 1.403 },
+            { type: 'H-BEAM', standard: '340*250*9*14', weight: 79.7, area4: 1.662, area3: 1.412 },
+            { type: 'H-BEAM', standard: '344*348*10*16', weight: 115.0, area4: 2.060, area3: 1.712 },
+            { type: 'H-BEAM', standard: '344*354*16*16', weight: 131.0, area4: 2.072, area3: 1.718 },
+            { type: 'H-BEAM', standard: '346*174*6*9', weight: 41.1, area4: 1.376, area3: 1.202 },
+            { type: 'H-BEAM', standard: '350*175*6*9', weight: 41.4, area4: 1.388, area3: 1.213 },
+            { type: 'H-BEAM', standard: '350*175*7*11', weight: 49.6, area4: 1.386, area3: 1.211 },
+            { type: 'H-BEAM', standard: '350*350*12*19', weight: 137.0, area4: 2.076, area3: 1.726 },
+            { type: 'H-BEAM', standard: '350*357*19*19', weight: 156.0, area4: 2.090, area3: 1.733 },
+            { type: 'H-BEAM', standard: '354*176*8*13', weight: 57.8, area4: 1.396, area3: 1.220 },
+            { type: 'H-BEAM', standard: '386*299*9*14', weight: 94.3, area4: 1.950, area3: 1.651 },
+            { type: 'H-BEAM', standard: '390*300*10*16', weight: 107.0, area4: 1.960, area3: 1.660 },
+            { type: 'H-BEAM', standard: '396*199*7*11', weight: 56.6, area4: 1.574, area3: 1.375 },
+            { type: 'H-BEAM', standard: '400*150*8*13', weight: 55.8, area4: 1.384, area3: 1.234 },
+            { type: 'H-BEAM', standard: '400*150*10*16', weight: 72.0, area4: 1.380, area3: 1.230 },
+            { type: 'H-BEAM', standard: '400*200*7*11', weight: 56.6, area4: 1.586, area3: 1.386 },
+            { type: 'H-BEAM', standard: '400*200*8*13', weight: 66.0, area4: 1.584, area3: 1.384 },
+            { type: 'H-BEAM', standard: '400*300*9*14', weight: 94.3, area4: 1.982, area3: 1.682 },
+            { type: 'H-BEAM', standard: '400*300*10*16', weight: 107.0, area4: 1.980, area3: 1.680 },
+            { type: 'H-BEAM', standard: '388*402*15*15', weight: 141.0, area4: 2.354, area3: 1.952 },
+            { type: 'H-BEAM', standard: '394*398*11*18', weight: 147.0, area4: 2.358, area3: 1.960 },
+            { type: 'H-BEAM', standard: '400*400*13*21', weight: 172.0, area4: 2.374, area3: 1.974 },
+            { type: 'H-BEAM', standard: '400*408*21*21', weight: 197.0, area4: 2.390, area3: 1.982 },
+            { type: 'H-BEAM', standard: '404*201*9*15', weight: 75.5, area4: 1.594, area3: 1.393 },
+            { type: 'H-BEAM', standard: '414*405*18*28', weight: 233.0, area4: 2.412, area3: 2.007 },
+            { type: 'H-BEAM', standard: '428*407*20*35', weight: 283.0, area4: 2.444, area3: 2.037 },
+            { type: 'H-BEAM', standard: '458*417*30*50', weight: 415.0, area4: 2.524, area3: 2.107 },
+            { type: 'H-BEAM', standard: '498*432*45*70', weight: 605.0, area4: 2.634, area3: 2.202 },
+            { type: 'H-BEAM', standard: '440*300*11*18', weight: 124.0, area4: 2.058, area3: 1.758 },
+            { type: 'H-BEAM', standard: '450*200*8*14', weight: 66.0, area4: 1.684, area3: 1.484 },
+            { type: 'H-BEAM', standard: '450*200*9*14', weight: 76.0, area4: 1.682, area3: 1.482 },
+            { type: 'H-BEAM', standard: '482*300*11*15', weight: 114.0, area4: 2.142, area3: 1.842 },
+            { type: 'H-BEAM', standard: '488*300*11*18', weight: 128.0, area4: 2.154, area3: 1.854 },
+            { type: 'H-BEAM', standard: '500*200*10*16', weight: 89.6, area4: 1.780, area3: 1.580 },
+            { type: 'H-BEAM', standard: '500*200*11*19', weight: 99.5, area4: 1.778, area3: 1.578 },
+            { type: 'H-BEAM', standard: '500*300*11*15', weight: 114.0, area4: 2.178, area3: 1.878 },
+            { type: 'H-BEAM', standard: '500*300*11*18', weight: 128.0, area4: 2.178, area3: 1.878 },
+            { type: 'H-BEAM', standard: '582*300*12*17', weight: 137.0, area4: 2.340, area3: 2.040 },
+            { type: 'H-BEAM', standard: '588*300*12*20', weight: 151.0, area4: 2.352, area3: 2.052 },
+            { type: 'H-BEAM', standard: '594*302*14*23', weight: 175.0, area4: 2.368, area3: 2.066 },
+            { type: 'H-BEAM', standard: '600*200*10*15', weight: 94.6, area4: 1.980, area3: 1.780 },
+            { type: 'H-BEAM', standard: '600*200*11*17', weight: 106.0, area4: 1.978, area3: 1.778 },
+            { type: 'H-BEAM', standard: '600*200*12*20', weight: 120.0, area4: 1.976, area3: 1.776 },
+            { type: 'H-BEAM', standard: '600*300*12*17', weight: 137.0, area4: 2.376, area3: 2.076 },
+            { type: 'H-BEAM', standard: '600*300*12*20', weight: 151.0, area4: 2.376, area3: 2.076 },
+            { type: 'H-BEAM', standard: '600*300*14*23', weight: 175.0, area4: 2.372, area3: 2.072 },
+            { type: 'H-BEAM', standard: '700*300*13*24', weight: 185.0, area4: 2.574, area3: 2.274 },
+            { type: 'H-BEAM', standard: '700*300*15*28', weight: 215.0, area4: 2.570, area3: 2.270 },
+            { type: 'H-BEAM', standard: '700*300*24*46', weight: 326.0, area4: 2.552, area3: 2.252 },
+            { type: 'H-BEAM', standard: '800*300*14*26', weight: 210.0, area4: 2.772, area3: 2.472 },
+            { type: 'H-BEAM', standard: '800*300*16*30', weight: 241.0, area4: 2.768, area3: 2.468 },
+            { type: 'H-BEAM', standard: '800*300*26*52', weight: 379.0, area4: 2.748, area3: 2.448 },
+            { type: 'H-BEAM', standard: '900*300*16*28', weight: 240.0, area4: 2.968, area3: 2.668 },
+            { type: 'H-BEAM', standard: '900*300*18*34', weight: 286.0, area4: 2.964, area3: 2.664 },
+            { type: 'H-BEAM', standard: '900*300*28*56', weight: 433.0, area4: 2.944, area3: 2.644 },
+            { type: 'H-BEAM', standard: '1000*300*16*32', weight: 268.0, area4: 3.168, area3: 2.868 },
+            { type: 'H-BEAM', standard: '1000*300*19*36', weight: 314.0, area4: 3.162, area3: 2.862 },
+            
+            // C형강 
+            { type: 'C형강', standard: '60*30*10*1.6', weight: 1.63, area4: 0.28, area3: 0 },
+            { type: 'C형강', standard: '60*30*10*2.0', weight: 1.99, area4: 0.28, area3: 0 },
+            { type: 'C형강', standard: '60*30*10*2.3', weight: 2.25, area4: 0.28, area3: 0 },
+            { type: 'C형강', standard: '75*45*15*1.6', weight: 2.32, area4: 0.39, area3: 0 },
+            { type: 'C형강', standard: '75*45*15*2.3', weight: 3.22, area4: 0.39, area3: 0 },
+            { type: 'C형강', standard: '100*50*20*1.6', weight: 2.89, area4: 0.48, area3: 0 },
+            { type: 'C형강', standard: '100*50*20*2.0', weight: 3.56, area4: 0.48, area3: 0 },
+            { type: 'C형강', standard: '100*50*20*2.3', weight: 4.06, area4: 0.48, area3: 0 },
+            { type: 'C형강', standard: '100*50*20*3.2', weight: 5.50, area4: 0.48, area3: 0 },
+            { type: 'C형강', standard: '125*50*20*2.0', weight: 3.95, area4: 0.53, area3: 0 },
+            { type: 'C형강', standard: '125*50*20*2.3', weight: 4.51, area4: 0.53, area3: 0 },
+            { type: 'C형강', standard: '125*50*20*3.2', weight: 6.13, area4: 0.53, area3: 0 },
+            { type: 'C형강', standard: '150*50*20*2.3', weight: 4.96, area4: 0.58, area3: 0 },
+            { type: 'C형강', standard: '150*50*20*3.2', weight: 6.76, area4: 0.58, area3: 0 },
+            { type: 'C형강', standard: '150*75*20*3.2', weight: 8.01, area4: 0.68, area3: 0 },
+            { type: 'C형강', standard: '200*75*20*3.2', weight: 9.27, area4: 0.78, area3: 0 },
+            { type: 'C형강', standard: '200*75*25*4.5', weight: 13.3, area4: 0.80, area3: 0 },
+
+            // I형강 
+            { type: 'I형강', standard: '125*75*5.5*9.5', weight: 16.1, area4: 0.539, area3: 0.464 },
+            { type: 'I형강', standard: '150*75*5.5*9.5', weight: 17.1, area4: 0.589, area3: 0.514 },
+            { type: 'I형강', standard: '200*100*7*10', weight: 26.0, area4: 0.786, area3: 0.686 },
+            { type: 'I형강', standard: '250*125*7.5*12.5', weight: 38.3, area4: 0.985, area3: 0.860 },
+            { type: 'I형강', standard: '300*150*8*13', weight: 48.3, area4: 1.185, area3: 1.035 },
+            { type: 'I형강', standard: '400*150*10*16', weight: 72.0, area4: 1.385, area3: 1.235 },
+
+            // ㄷ형강 
+            { type: 'ㄷ형강', standard: '75*40*5*7', weight: 6.92, area4: 0.300, area3: 0.260 },
+            { type: 'ㄷ형강', standard: '100*50*5*7.5', weight: 9.36, area4: 0.390, area3: 0.340 },
+            { type: 'ㄷ형강', standard: '125*65*6*8', weight: 13.4, area4: 0.498, area3: 0.433 },
+            { type: 'ㄷ형강', standard: '150*75*6.5*10', weight: 18.6, area4: 0.586, area3: 0.511 },
+            { type: 'ㄷ형강', standard: '200*80*7.5*11', weight: 24.6, area4: 0.706, area3: 0.626 },
+            { type: 'ㄷ형강', standard: '200*90*8*13.5', weight: 30.3, area4: 0.743, area3: 0.653 },
+            { type: 'ㄷ형강', standard: '250*90*9*13', weight: 34.6, area4: 0.843, area3: 0.753 },
+            { type: 'ㄷ형강', standard: '300*90*9*13', weight: 38.1, area4: 0.943, area3: 0.853 },
+            { type: 'ㄷ형강', standard: '380*100*10.5*16', weight: 54.5, area4: 1.140, area3: 1.040 },
+
+            // ㄱ형강 
+            { type: 'ㄱ형강', standard: '25*25*3', weight: 1.12, area4: 0.100, area3: 0 },
+            { type: 'ㄱ형강', standard: '30*30*3', weight: 1.36, area4: 0.120, area3: 0 },
+            { type: 'ㄱ형강', standard: '40*40*5', weight: 2.95, area4: 0.160, area3: 0 },
+            { type: 'ㄱ형강', standard: '45*45*4', weight: 2.74, area4: 0.180, area3: 0 },
+            { type: 'ㄱ형강', standard: '45*45*5', weight: 3.38, area4: 0.180, area3: 0 },
+            { type: 'ㄱ형강', standard: '50*50*4', weight: 3.06, area4: 0.200, area3: 0 },
+            { type: 'ㄱ형강', standard: '50*50*6', weight: 4.43, area4: 0.200, area3: 0 },
+            { type: 'ㄱ형강', standard: '65*65*6', weight: 5.91, area4: 0.260, area3: 0 },
+            { type: 'ㄱ형강', standard: '65*65*8', weight: 7.66, area4: 0.260, area3: 0 },
+            { type: 'ㄱ형강', standard: '75*75*6', weight: 6.85, area4: 0.300, area3: 0 },
+            { type: 'ㄱ형강', standard: '75*75*9', weight: 9.96, area4: 0.300, area3: 0 },
+            { type: 'ㄱ형강', standard: '90*90*10', weight: 13.3, area4: 0.360, area3: 0 },
+            { type: 'ㄱ형강', standard: '100*100*10', weight: 14.9, area4: 0.400, area3: 0 },
+            { type: 'ㄱ형강', standard: '130*130*12', weight: 23.4, area4: 0.520, area3: 0 },
+            { type: 'ㄱ형강', standard: '150*150*15', weight: 33.6, area4: 0.600, area3: 0 },
+            { type: 'ㄱ형강', standard: '200*200*20', weight: 59.7, area4: 0.800, area3: 0 },
+
+            // 환봉 
+            { type: '환봉', standard: 'D6', weight: 0.222, area4: 0.0188, area3: 0 },
+            { type: '환봉', standard: 'D10', weight: 0.617, area4: 0.0314, area3: 0 },
+            { type: '환봉', standard: 'D13', weight: 0.995, area4: 0.0398, area3: 0 },
+            { type: '환봉', standard: 'D16', weight: 1.560, area4: 0.0498, area3: 0 },
+            { type: '환봉', standard: 'D19', weight: 2.250, area4: 0.0598, area3: 0 },
+            { type: '환봉', standard: 'D22', weight: 3.040, area4: 0.0698, area3: 0 },
+            { type: '환봉', standard: 'D25', weight: 3.980, area4: 0.0798, area3: 0 },
+            { type: '환봉', standard: 'D29', weight: 5.040, area4: 0.0900, area3: 0 },
+            { type: '환봉', standard: 'D32', weight: 6.230, area4: 0.1000, area3: 0 },
+            
+            // 각형강 (정방형 및 직방형)
+            { type: '각형강', standard: '40*40*1.6', weight: 1.81, area4: 0.16, area3: 0 },
+            { type: '각형강', standard: '40*40*2.0', weight: 2.21, area4: 0.16, area3: 0 },
+            { type: '각형강', standard: '50*50*1.6', weight: 2.31, area4: 0.20, area3: 0 },
+            { type: '각형강', standard: '50*50*2.0', weight: 2.84, area4: 0.20, area3: 0 },
+            { type: '각형강', standard: '50*50*2.3', weight: 3.22, area4: 0.20, area3: 0 },
+            { type: '각형강', standard: '50*50*3.2', weight: 4.30, area4: 0.20, area3: 0 },
+            { type: '각형강', standard: '60*60*1.6', weight: 2.81, area4: 0.24, area3: 0 },
+            { type: '각형강', standard: '60*60*2.0', weight: 3.47, area4: 0.24, area3: 0 },
+            { type: '각형강', standard: '60*60*2.3', weight: 3.94, area4: 0.24, area3: 0 },
+            { type: '각형강', standard: '60*60*3.2', weight: 5.30, area4: 0.24, area3: 0 },
+            { type: '각형강', standard: '75*75*2.3', weight: 5.03, area4: 0.30, area3: 0 },
+            { type: '각형강', standard: '75*75*3.2', weight: 6.81, area4: 0.30, area3: 0 },
+            { type: '각형강', standard: '100*50*1.6', weight: 3.56, area4: 0.30, area3: 0 },
+            { type: '각형강', standard: '100*50*2.0', weight: 4.41, area4: 0.30, area3: 0 },
+            { type: '각형강', standard: '100*50*2.3', weight: 5.03, area4: 0.30, area3: 0 },
+            { type: '각형강', standard: '100*50*3.2', weight: 6.81, area4: 0.30, area3: 0 },
+            { type: '각형강', standard: '100*100*2.3', weight: 6.83, area4: 0.40, area3: 0 },
+            { type: '각형강', standard: '100*100*3.2', weight: 9.32, area4: 0.40, area3: 0 },
+            { type: '각형강', standard: '100*100*4.5', weight: 12.80, area4: 0.40, area3: 0 },
+            { type: '각형강', standard: '125*75*2.3', weight: 6.83, area4: 0.40, area3: 0 },
+            { type: '각형강', standard: '125*75*3.2', weight: 9.32, area4: 0.40, area3: 0 },
+            { type: '각형강', standard: '150*100*3.2', weight: 11.80, area4: 0.50, area3: 0 },
+            { type: '각형강', standard: '150*150*3.2', weight: 14.30, area4: 0.60, area3: 0 },
+            { type: '각형강', standard: '150*150*4.5', weight: 19.80, area4: 0.60, area3: 0 },
+            { type: '각형강', standard: '200*200*4.5', weight: 26.90, area4: 0.80, area3: 0 }
+        ];
+
+        let currentFocus = -1;
+        let selectedSteelObj = null;
+        let calculationList = [];
+
+        const locInput = document.getElementById("locInput");
+        const memberInput = document.getElementById("memberInput");
+        const steelTypeSelect = document.getElementById("steelType");
+        const standardInput = document.getElementById("standardSize");
+        const lengthInput = document.getElementById("lengthInput");
+        const qtyInput = document.getElementById("qtyInput");
+        const autocompleteList = document.getElementById("autocomplete-list");
+        const unitInfoDiv = document.getElementById("unitInfo");
+
+        // --- Built-up(제작타입) 계산 로직 ---
+        function calculateBuiltUp(standardStr) {
+            const parts = standardStr.split('*').map(p => parseFloat(p.trim()));
+            if (parts.length === 4 && parts.every(p => !isNaN(p) && p > 0)) {
+                const [H, B, t1, t2] = parts;
+                
+                // 단면적 (A) = (웹단면적) + (플랜지단면적)
+                const area = ((H - 2 * t2) * t1) + (B * t2 * 2);
+                
+                // 단위중량
+                const weight = area * 0.00785;
+                
+                // 4면 면적 = (4*B + 2*H - 2*t1) / 1000
+                const area4 = (4 * B + 2 * H - 2 * t1) / 1000;
+                
+                // 3면 면적 = (3*B + 2*H - 2*t1) / 1000
+                const area3 = (3 * B + 2 * H - 2 * t1) / 1000;
+                
+                return { weight, area4, area3 };
+            }
+            return null;
+        }
+
+
+        // --- 2. 자동완성 기능 및 동적 계산 ---
+        standardInput.addEventListener("input", function(e) {
+            let val = this.value.trim();
+            let typeVal = steelTypeSelect.value;
+            closeAllLists();
+            selectedSteelObj = null;
+            
+            if (typeVal === 'H-beam(built-up)') {
+                const calc = calculateBuiltUp(val);
+                if (calc) {
+                    selectedSteelObj = {
+                        type: typeVal,
+                        standard: val,
+                        weight: calc.weight,
+                        area4: calc.area4,
+                        area3: calc.area3
+                    };
+                    
+                    unitInfoDiv.className = "mt-4 p-3 text-sm rounded-lg border border-red-100 bg-red-50 text-red-800";
+                    unitInfoDiv.innerHTML = `
+                        <span class="font-semibold">[H-beam (Built-up)] ${val}</span> 
+                        산식적용 | 단중: <strong>${calc.weight.toFixed(2)}</strong> kg/m, 면적(4면): <strong>${calc.area4.toFixed(3)}</strong> m²/m, 면적(3면): <strong>${calc.area3.toFixed(3)}</strong> m²/m
+                    `;
+                    unitInfoDiv.classList.remove('hidden');
+                } else {
+                    unitInfoDiv.classList.add('hidden');
+                }
+                return;
+            }
+
+            unitInfoDiv.className = "mt-4 p-3 text-sm rounded-lg border border-blue-100 bg-blue-50 text-blue-800 hidden";
+
+            if (!val) return false;
+            currentFocus = -1;
+
+            autocompleteList.classList.remove('hidden');
+            autocompleteList.innerHTML = '';
+
+            const matches = steelData.filter(item => 
+                item.type === typeVal && item.standard.includes(val)
+            );
+
+            matches.forEach((item, index) => {
+                let div = document.createElement("div");
+                let matchIndex = item.standard.indexOf(val);
+                let textBefore = item.standard.substring(0, matchIndex);
+                let textMatch = item.standard.substring(matchIndex, matchIndex + val.length);
+                let textAfter = item.standard.substring(matchIndex + val.length);
+                
+                div.innerHTML = `${textBefore}<strong class="text-blue-600">${textMatch}</strong>${textAfter}`;
+                div.innerHTML += `<input type='hidden' value='${item.standard}'>`;
+                
+                div.addEventListener("click", function(e) {
+                    standardInput.value = this.getElementsByTagName("input")[0].value;
+                    selectItem(item);
+                    closeAllLists();
+                });
+                autocompleteList.appendChild(div);
+            });
+
+            if (matches.length === 0) {
+                let div = document.createElement("div");
+                div.innerHTML = "<span class='text-gray-400'>검색 결과가 없습니다.</span>";
+                autocompleteList.appendChild(div);
+            }
+        });
+
+        steelTypeSelect.addEventListener("change", function() {
+            if (this.value === 'H-beam(built-up)') {
+                standardInput.placeholder = "예: 200*200*8*14 (직접입력)";
+            } else {
+                standardInput.placeholder = "예: 100 입력 후 방향키";
+            }
+            standardInput.value = '';
+            selectedSteelObj = null;
+            unitInfoDiv.classList.add('hidden');
+            closeAllLists();
+        });
+
+        function selectItem(item) {
+            selectedSteelObj = item;
+            unitInfoDiv.className = "mt-4 p-3 text-sm rounded-lg border border-blue-100 bg-blue-50 text-blue-800";
+            unitInfoDiv.innerHTML = `
+                <span class="font-semibold">[${item.type}] ${item.standard}</span> 
+                선택됨 | 단중: <strong>${item.weight}</strong> kg/m, 면적(4면): <strong>${item.area4}</strong> m²/m, 면적(3면): <strong>${item.area3}</strong> m²/m
+            `;
+            unitInfoDiv.classList.remove('hidden');
+            lengthInput.focus();
+        }
+
+        standardInput.addEventListener("keydown", function(e) {
+            if (steelTypeSelect.value === 'H-beam(built-up)') return;
+
+            let x = document.getElementById("autocomplete-list");
+            if (x) x = x.getElementsByTagName("div");
+            if (!x || x.length === 0 || x[0].innerText === "검색 결과가 없습니다.") return;
+
+            if (e.keyCode == 40) {
+                currentFocus++;
+                addActive(x);
+                scrollToActive(x);
+            } else if (e.keyCode == 38) {
+                currentFocus--;
+                addActive(x);
+                scrollToActive(x);
+            } else if (e.keyCode == 13) {
+                e.preventDefault();
+                if (currentFocus > -1) {
+                    if (x) x[currentFocus].click();
+                } else if (x.length > 0) {
+                    x[0].click();
+                }
+            }
+        });
+
+        function addActive(x) {
+            if (!x) return false;
+            removeActive(x);
+            if (currentFocus >= x.length) currentFocus = 0;
+            if (currentFocus < 0) currentFocus = (x.length - 1);
+            x[currentFocus].classList.add("autocomplete-active");
+        }
+
+        function removeActive(x) {
+            for (let i = 0; i < x.length; i++) {
+                x[i].classList.remove("autocomplete-active");
+            }
+        }
+
+        function scrollToActive(x) {
+            if (currentFocus > -1 && x[currentFocus]) {
+                const list = document.getElementById("autocomplete-list");
+                const activeEl = x[currentFocus];
+                const offsetBottom = activeEl.offsetTop + activeEl.offsetHeight;
+                if (offsetBottom > list.scrollTop + list.offsetHeight) {
+                    list.scrollTop = offsetBottom - list.offsetHeight;
+                } else if (activeEl.offsetTop < list.scrollTop) {
+                    list.scrollTop = activeEl.offsetTop;
+                }
+            }
+        }
+
+        function closeAllLists(elmnt) {
+            let x = document.getElementsByClassName("autocomplete-items");
+            for (let i = 0; i < x.length; i++) {
+                if (elmnt != x[i] && elmnt != standardInput) {
+                    x[i].classList.add("hidden");
+                }
+            }
+        }
+
+        document.addEventListener("click", function (e) {
+            closeAllLists(e.target);
+        });
+
+        // --- 3. 계산 및 리스트 추가 ---
+        qtyInput.addEventListener("keydown", function(e) {
+            if (e.keyCode === 13) {
+                e.preventDefault();
+                addToList();
+            }
+        });
+
+        function addToList() {
+            const locVal = locInput.value.trim();
+            const memberVal = memberInput.value.trim();
+            const typedStandard = standardInput.value.trim();
+            const lengthVal = parseFloat(lengthInput.value);
+            const qtyVal = parseInt(qtyInput.value) || 1;
+            const lossRateVal = parseFloat(document.getElementById("globalLossRate").value) || 0;
+            const typeVal = steelTypeSelect.value;
+
+            if (typeVal === 'H-beam(built-up)') {
+                const calc = calculateBuiltUp(typedStandard);
+                if (!calc) {
+                    alert("H-beam(built-up) 규격을 정확히 입력해주세요.\n형식: H*B*t1*t2 (예: 200*200*8*14)");
+                    standardInput.focus();
+                    return;
+                }
+                selectedSteelObj = {
+                    type: typeVal,
+                    standard: typedStandard,
+                    weight: calc.weight,
+                    area4: calc.area4,
+                    area3: calc.area3
+                };
+            } else {
+                if (!selectedSteelObj && typedStandard) {
+                    selectedSteelObj = steelData.find(item => item.type === typeVal && item.standard === typedStandard);
+                }
+            }
+
+            if (!selectedSteelObj) {
+                alert("표준단면치수를 정확히 검색하여 선택하거나 정확하게 입력해주세요.");
+                standardInput.focus();
+                return;
+            }
+            if (isNaN(lengthVal) || lengthVal <= 0) {
+                alert("올바른 길이(mm)를 입력해주세요.");
+                lengthInput.focus();
+                return;
+            }
+            if (isNaN(qtyVal) || qtyVal <= 0) {
+                alert("올바른 수량(EA)을 입력해주세요.");
+                qtyInput.focus();
+                return;
+            }
+
+            const lengthInMeters = lengthVal / 1000;
+            const unitWeight = selectedSteelObj.weight;
+            
+            const calcWeight = lengthInMeters * qtyVal * unitWeight * (1 + lossRateVal / 100);
+            const calcArea4 = selectedSteelObj.area4 * lengthInMeters * qtyVal;
+            const calcArea3 = selectedSteelObj.area3 * lengthInMeters * qtyVal;
+
+            const newItem = {
+                id: Date.now(),
+                location: locVal,
+                member: memberVal,
+                type: selectedSteelObj.type,
+                standard: selectedSteelObj.standard,
+                length: lengthVal,
+                qty: qtyVal,
+                unitWeight: unitWeight,
+                lossRate: lossRateVal,
+                weight: calcWeight,
+                area4: calcArea4,
+                area3: calcArea3
+            };
+
+            calculationList.push(newItem);
+            renderTable();
+
+            // 개선: 표준단면치수는 유지하고, 길이만 비운 뒤 길이 입력창으로 커서 이동
+            // standardInput.value = ''; <-- 유지하기 위해 주석/삭제 처리
+            lengthInput.value = '';
+            qtyInput.value = '1';
+            // selectedSteelObj 유지 (동일 규격 연속 입력을 위함)
+            
+            lengthInput.focus(); // 커서를 길이 텍스트 박스로 이동
+
+            // 추가 피드백 효과 보여주기
+            const feedback = document.getElementById('addFeedback');
+            feedback.classList.remove('opacity-0');
+            feedback.classList.add('opacity-100');
+            setTimeout(() => {
+                feedback.classList.remove('opacity-100');
+                feedback.classList.add('opacity-0');
+            }, 2000);
+        }
+
+        function updateGlobalLossRate() {
+            const newRate = parseFloat(document.getElementById("globalLossRate").value) || 0;
+            calculationList.forEach(item => {
+                item.lossRate = newRate;
+                item.weight = (item.length / 1000) * item.qty * item.unitWeight * (1 + newRate / 100);
+            });
+            renderTable();
+        }
+
+        // --- 삭제 확인 모달 로직 ---
+        let itemToDelete = null;
+
+        function confirmDelete(id) {
+            itemToDelete = id;
+            document.getElementById('deleteConfirmModal').classList.remove('hidden');
+        }
+
+        function cancelDelete() {
+            itemToDelete = null;
+            document.getElementById('deleteConfirmModal').classList.add('hidden');
+        }
+
+        function executeDelete() {
+            if (itemToDelete !== null) {
+                calculationList = calculationList.filter(item => item.id !== itemToDelete);
+                renderTable();
+            }
+            cancelDelete();
+        }
+
+        let editingId = null;
+
+        function startEdit(id) {
+            editingId = id;
+            renderTable();
+        }
+
+        function cancelEdit() {
+            editingId = null;
+            renderTable();
+        }
+
+        function saveEdit(id) {
+            const itemIndex = calculationList.findIndex(i => i.id === id);
+            if (itemIndex === -1) return;
+            const item = calculationList[itemIndex];
+
+            const stdInput = document.getElementById(`edit-std-${id}`).value.trim();
+            const lenInput = parseFloat(document.getElementById(`edit-len-${id}`).value);
+            const qtyInput = parseInt(document.getElementById(`edit-qty-${id}`).value);
+
+            if (isNaN(lenInput) || lenInput <= 0) {
+                alert("올바른 길이(mm)를 입력해주세요.");
+                return;
+            }
+            if (isNaN(qtyInput) || qtyInput <= 0) {
+                alert("올바른 수량(EA)을 입력해주세요.");
+                return;
+            }
+
+            const lossRateVal = parseFloat(document.getElementById("globalLossRate").value) || 0;
+            const lengthInMeters = lenInput / 1000;
+
+            if (item.type === 'H-beam(built-up)') {
+                const calc = calculateBuiltUp(stdInput);
+                if (!calc) {
+                    alert("H-beam(built-up) 규격을 정확히 입력해주세요.\n형식: H*B*t1*t2 (예: 200*200*8*14)");
+                    return;
+                }
+                item.standard = stdInput;
+                item.length = lenInput;
+                item.qty = qtyInput;
+                item.unitWeight = calc.weight;
+                item.weight = lengthInMeters * item.qty * item.unitWeight * (1 + lossRateVal / 100);
+                item.area4 = calc.area4 * lengthInMeters * item.qty;
+                item.area3 = calc.area3 * lengthInMeters * item.qty;
+            } else {
+                const matchedSteel = steelData.find(s => s.type === item.type && s.standard === stdInput);
+                if (!matchedSteel) {
+                    alert("해당 강종에 유효하지 않은 규격입니다."); 
+                    return;
+                }
+                item.standard = matchedSteel.standard;
+                item.length = lenInput;
+                item.qty = qtyInput;
+                item.unitWeight = matchedSteel.weight;
+                item.weight = lengthInMeters * item.qty * item.unitWeight * (1 + lossRateVal / 100);
+                item.area4 = matchedSteel.area4 * lengthInMeters * item.qty;
+                item.area3 = matchedSteel.area3 * lengthInMeters * item.qty;
+            }
+
+            editingId = null; 
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById("listBody");
+            const tfoot = document.querySelector("#resultTable tfoot");
+            
+            tbody.innerHTML = '';
+            tfoot.innerHTML = '';
+
+            if (calculationList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="13" class="px-6 py-8 text-center text-gray-500">데이터를 입력하여 리스트를 추가해주세요.</td></tr>`;
+                tfoot.innerHTML = `
+                    <tr class="bg-gray-100 font-bold border-t-2 border-gray-300">
+                        <td colspan="9" class="px-6 py-4 text-center text-gray-900 text-base">총 합계</td>
+                        <td class="px-6 py-4 text-right text-blue-700">0.00</td>
+                        <td class="px-6 py-4 text-right text-green-700">0.000</td>
+                        <td class="px-6 py-4 text-right text-orange-700">0.000</td>
+                        <td></td>
+                    </tr>
+                `;
+                return;
+            }
+
+            calculationList.forEach((item, index) => {
+                const isEditing = editingId === item.id;
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors";
+
+                if (isEditing) {
+                    let stdInputHtml = '';
+                    if (item.type === 'H-beam(built-up)') {
+                        stdInputHtml = `<input type="text" id="edit-std-${item.id}" value="${item.standard}" class="w-full border border-red-400 rounded px-2 py-1 text-sm outline-none bg-red-50 text-red-800 focus:ring-1 focus:ring-red-500 font-mono">`;
+                    } else {
+                        const availableSteels = steelData.filter(s => s.type === item.type);
+                        const optionsHtml = availableSteels.map(s => 
+                            `<option value="${s.standard}" ${s.standard === item.standard ? 'selected' : ''}>${s.standard}</option>`
+                        ).join('');
+                        stdInputHtml = `<select id="edit-std-${item.id}" class="w-full border border-blue-400 rounded px-2 py-1 text-sm outline-none bg-blue-50 focus:ring-1 focus:ring-blue-500 font-mono">${optionsHtml}</select>`;
+                    }
+
+                    tr.innerHTML = `
+                        <td class="px-6 py-3 border-r border-gray-100">${index + 1}</td>
+                        <td class="px-6 py-3 text-gray-500">${item.location}</td>
+                        <td class="px-6 py-3 text-gray-500">${item.member}</td>
+                        <td class="px-6 py-3 font-medium text-gray-500">${item.type}</td>
+                        <td class="px-6 py-2">${stdInputHtml}</td>
+                        <td class="px-6 py-2 text-right">
+                            <input type="number" id="edit-len-${item.id}" value="${item.length}" step="1" min="0" class="w-20 border border-blue-400 rounded px-2 py-1 text-sm outline-none text-right bg-blue-50 focus:ring-1 focus:ring-blue-500">
+                        </td>
+                        <td class="px-6 py-2 text-right">
+                            <input type="number" id="edit-qty-${item.id}" value="${item.qty}" min="1" class="w-16 border border-blue-400 rounded px-2 py-1 text-sm outline-none text-right bg-blue-50 focus:ring-1 focus:ring-blue-500">
+                        </td>
+                        <td class="px-6 py-3 text-right text-gray-400">${item.unitWeight.toLocaleString('ko-KR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td class="px-6 py-3 text-right text-gray-400">${item.lossRate}%</td>
+                        <td class="px-6 py-3 text-right font-bold text-gray-400">${item.weight.toLocaleString('ko-KR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td class="px-6 py-3 text-right text-gray-400">${item.area4.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td class="px-6 py-3 text-right text-gray-400">${item.area3.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td class="px-6 py-2 text-center">
+                            <div class="flex justify-center gap-1">
+                                <button onclick="saveEdit(${item.id})" class="bg-green-100 text-green-700 hover:bg-green-200 px-2 py-1 rounded text-xs font-bold transition-colors shadow-sm">저장</button>
+                                <button onclick="cancelEdit()" class="bg-gray-200 text-gray-700 hover:bg-gray-300 px-2 py-1 rounded text-xs transition-colors shadow-sm">취소</button>
+                            </div>
+                        </td>
+                    `;
+                } else {
+                    const standardClass = item.type === 'H-beam(built-up)' ? "text-red-600" : "text-blue-600";
+                    tr.innerHTML = `
+                        <td class="px-6 py-3 border-r border-gray-100">${index + 1}</td>
+                        <td class="px-6 py-3 text-gray-700">${item.location}</td>
+                        <td class="px-6 py-3 text-gray-700">${item.member}</td>
+                        <td class="px-6 py-3 font-medium text-gray-900">${item.type}</td>
+                        <td class="px-6 py-3 ${standardClass} font-mono">${item.standard}</td>
+                        <td class="px-6 py-3 text-right bg-gray-50 font-medium">${item.length.toLocaleString('ko-KR', {maximumFractionDigits: 1})}</td>
+                        <td class="px-6 py-3 text-right bg-blue-50 font-semibold">${item.qty}</td>
+                        <td class="px-6 py-3 text-right text-gray-600">${item.unitWeight.toLocaleString('ko-KR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td class="px-6 py-3 text-right text-gray-600">${item.lossRate}%</td>
+                        <td class="px-6 py-3 text-right font-bold text-gray-900">${item.weight.toLocaleString('ko-KR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td class="px-6 py-3 text-right text-gray-600">${item.area4.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td class="px-6 py-3 text-right text-gray-600">${item.area3.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td class="px-6 py-3 text-center">
+                            <div class="flex justify-center gap-2">
+                                <button onclick="startEdit(${item.id})" class="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-1.5 rounded transition-colors" title="수정">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                    </svg>
+                                </button>
+                                <button onclick="confirmDelete(${item.id})" class="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded transition-colors" title="삭제">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                }
+                tbody.appendChild(tr);
+            });
+
+            const groupedData = getGroupedData();
+            let totalW = 0, totalA4 = 0, totalA3 = 0;
+
+            groupedData.forEach(g => {
+                totalW += g.weight;
+                totalA4 += g.area4;
+                totalA3 += g.area3;
+
+                const tr = document.createElement('tr');
+                tr.className = "bg-blue-50/60 border-t border-gray-200 text-gray-700";
+                
+                tr.innerHTML = `
+                    <td colspan="3" class="px-6 py-2 text-center text-xs font-bold text-blue-700">[집계]</td>
+                    <td class="px-6 py-2 font-bold text-gray-800">${g.type}</td>
+                    <td class="px-6 py-2 font-mono font-semibold text-blue-700">${g.standard}</td>
+                    <td class="px-6 py-2 text-right text-gray-600">${g.totalLength.toLocaleString('ko-KR', {maximumFractionDigits: 1})}</td>
+                    <td class="px-6 py-2 text-right font-bold text-gray-800">${g.qty}</td>
+                    <td colspan="2" class="px-6 py-2 text-right text-xs text-gray-500">소계</td>
+                    <td class="px-6 py-2 text-right font-bold text-gray-900">${g.weight.toLocaleString('ko-KR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="px-6 py-2 text-right text-gray-600">${g.area4.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                    <td class="px-6 py-2 text-right text-gray-600">${g.area3.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                    <td></td>
+                `;
+                tfoot.appendChild(tr);
+            });
+
+            const gtRow = document.createElement('tr');
+            gtRow.className = "bg-gray-200 font-bold border-t-2 border-gray-400 text-base";
+            gtRow.innerHTML = `
+                <td colspan="9" class="px-6 py-4 text-center text-gray-900">총 합계</td>
+                <td class="px-6 py-4 text-right text-blue-800">${totalW.toLocaleString('ko-KR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td class="px-6 py-4 text-right text-green-800">${totalA4.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                <td class="px-6 py-4 text-right text-orange-800">${totalA3.toLocaleString('ko-KR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                <td></td>
+            `;
+            tfoot.appendChild(gtRow);
+        }
+
+        function getGroupedData() {
+            const groups = {};
+            
+            calculationList.forEach(item => {
+                const key = item.type + '|' + item.standard;
+                if (!groups[key]) {
+                    groups[key] = {
+                        type: item.type,
+                        standard: item.standard,
+                        totalLength: 0,
+                        qty: 0,
+                        weight: 0,
+                        area4: 0,
+                        area3: 0
+                    };
+                }
+                groups[key].totalLength += (item.length * item.qty);
+                groups[key].qty += item.qty;
+                groups[key].weight += item.weight;
+                groups[key].area4 += item.area4;
+                groups[key].area3 += item.area3;
+            });
+
+            const typeOrder = {'H-BEAM': 1, 'H-beam(built-up)': 2, 'C형강': 3, 'I형강': 4, 'L형강': 5, 'ㄷ형강': 6, 'ㄱ형강': 7, '환봉': 8, '각형강': 9};
+
+            const parseDimensions = (standard) => {
+                const nums = standard.match(/\d+(\.\d+)?/g);
+                return nums ? nums.map(Number) : [0];
+            };
+
+            return Object.values(groups).sort((a, b) => {
+                const orderA = typeOrder[a.type] || 99;
+                const orderB = typeOrder[b.type] || 99;
+                
+                if (orderA !== orderB) return orderA - orderB;
+
+                const dimsA = parseDimensions(a.standard);
+                const dimsB = parseDimensions(b.standard);
+                for (let i = 0; i < Math.max(dimsA.length, dimsB.length); i++) {
+                    const valA = dimsA[i] || 0;
+                    const valB = dimsB[i] || 0;
+                    if (valA !== valB) return valB - valA; 
+                }
+                return 0;
+            });
+        }
+
+        // --- 4. 엑셀 내보내기 ---
+        function exportToExcel() {
+            if (calculationList.length === 0) {
+                alert("내보낼 데이터가 없습니다.");
+                return;
+            }
+
+            const projectName = document.getElementById("projectName").value || "공사명 미지정";
+
+            let excelData = [];
+            excelData.push(["강재 중량 및 면적 산출서"]);
+            excelData.push(["공사명:", projectName]);
+            excelData.push([]); 
+            
+            excelData.push(["No.", "위치", "부재명", "항목", "표준단면치수", "길이(mm)", "수량(EA)", "단위중량(kg/m)", "로스율(%)", "중량(KG)", "단위면적 4면(M²)", "단위면적 3면(M²)"]);
+            
+            let tw=0, ta4=0, ta3=0;
+            calculationList.forEach((item, index) => {
+                let excelRow = index + 5; 
+                
+                let weightFormula = { 
+                    t: 'n', 
+                    v: item.weight, 
+                    f: `(F${excelRow}/1000)*G${excelRow}*H${excelRow}*(1+I${excelRow}/100)` 
+                };
+
+                excelData.push([
+                    index + 1,
+                    item.location,
+                    item.member,
+                    item.type,
+                    item.standard,
+                    item.length,
+                    item.qty,
+                    item.unitWeight,
+                    item.lossRate,
+                    weightFormula,
+                    item.area4,
+                    item.area3
+                ]);
+                tw += item.weight; ta4 += item.area4; ta3 += item.area3;
+            });
+
+            let totalRow = calculationList.length + 6;
+            excelData.push(["", "", "", "", "", "", "", "", "", "", "", ""]);
+            excelData.push([
+                "총 합계", "", "", "", "", "", "", "", "", 
+                { t: 'n', v: tw, f: `SUM(J5:J${totalRow-2})` }, 
+                { t: 'n', v: ta4, f: `SUM(K5:K${totalRow-2})` }, 
+                { t: 'n', v: ta3, f: `SUM(L5:L${totalRow-2})` }
+            ]);
+
+            // [시트 2: 규격별 집계표]
+            let excelDataSummary = [];
+            excelDataSummary.push(["규격별 강재 집계표"]);
+            excelDataSummary.push(["공사명:", projectName]);
+            excelDataSummary.push([]); 
+            excelDataSummary.push(["No.", "항목", "표준단면치수", "총 길이(mm)", "총 수량(EA)", "총 중량(KG)", "단위면적 4면(M²)", "단위면적 3면(M²)"]);
+
+            const groupedData = getGroupedData();
+            let sumW = 0, sumA4 = 0, sumA3 = 0;
+
+            groupedData.forEach((g, index) => {
+                excelDataSummary.push([
+                    index + 1,
+                    g.type,
+                    g.standard,
+                    g.totalLength,
+                    g.qty,
+                    g.weight,
+                    g.area4,
+                    g.area3
+                ]);
+                sumW += g.weight;
+                sumA4 += g.area4;
+                sumA3 += g.area3;
+            });
+
+            excelDataSummary.push(["", "", "", "", "", "", "", ""]);
+            excelDataSummary.push(["총 합계", "", "", "", "", sumW, sumA4, sumA3]);
+
+            var wb = XLSX.utils.book_new();
+            
+            var ws1 = XLSX.utils.aoa_to_sheet(excelData);
+            var wscols1 = [
+                {wch:5}, {wch:10}, {wch:10}, {wch:15}, {wch:25}, {wch:10}, {wch:8}, {wch:15}, {wch:10}, {wch:15}, {wch:15}, {wch:15}
+            ];
+            ws1['!cols'] = wscols1;
+            XLSX.utils.book_append_sheet(wb, ws1, "산출내역");
+
+            var ws2 = XLSX.utils.aoa_to_sheet(excelDataSummary);
+            var wscols2 = [
+                {wch:5}, {wch:15}, {wch:25}, {wch:15}, {wch:12}, {wch:15}, {wch:15}, {wch:15}
+            ];
+            ws2['!cols'] = wscols2;
+            XLSX.utils.book_append_sheet(wb, ws2, "규격별집계");
+            
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            XLSX.writeFile(wb, `강재산출서_${dateStr}.xlsx`);
+        }
+
+        // --- 5. JSON 저장 (백업용) ---
+        function exportToJson() {
+            if (calculationList.length === 0) {
+                alert("저장할 데이터가 없습니다.");
+                return;
+            }
+
+            const dataToSave = {
+                projectName: document.getElementById("projectName").value,
+                globalLossRate: document.getElementById("globalLossRate").value,
+                calculationList: calculationList
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToSave));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            downloadAnchorNode.setAttribute("download", `강재산출서_백업_${dateStr}.json`);
+            
+            document.body.appendChild(downloadAnchorNode); 
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        // --- 6. JSON 불러오기 (복원용) ---
+        function importFromJson(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    if (importedData.calculationList && Array.isArray(importedData.calculationList)) {
+                        calculationList = importedData.calculationList;
+                        
+                        if (importedData.projectName !== undefined) {
+                            document.getElementById("projectName").value = importedData.projectName;
+                        }
+                        if (importedData.globalLossRate !== undefined) {
+                            document.getElementById("globalLossRate").value = importedData.globalLossRate;
+                        }
+                        
+                        updateGlobalLossRate();
+                        
+                        alert("데이터를 성공적으로 불러왔습니다.");
+                    } else {
+                        alert("유효하지 않은 백업 파일 형식입니다.");
+                    }
+                } catch (error) {
+                    alert("파일을 읽는 중 오류가 발생했습니다.");
+                }
+                
+                event.target.value = '';
+            };
+            
+            reader.readAsText(file);
+        }
+
+    </script>
+</body>
+</html>

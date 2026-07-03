@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오토캐드 통합 단축키 매뉴얼</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f3f4f6;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        .a4-canvas {
+            background-color: white;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .header-bg {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        }
+        .kbd-key {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.2rem 0.5rem;
+            font-family: monospace;
+            font-size: 1.05rem;
+            font-weight: 700;
+            border-radius: 6px;
+            text-align: center;
+            min-width: 48px;
+            height: 30px;
+            box-shadow: 0 2px 0;
+            border: 1px solid;
+        }
+        .kbd-basic {
+            background-color: #f3f4f6;
+            color: #374151;
+            border-color: #d1d5db;
+            box-shadow: 0 2px 0 #9ca3af;
+        }
+        .kbd-q {
+            background-color: #e0e7ff;
+            color: #1e40af;
+            border-color: #bfdbfe;
+            box-shadow: 0 2px 0 #93c5fd;
+        }
+        .kbd-util {
+            background-color: #f0fdf4;
+            color: #115e59;
+            border-color: #99f6e4;
+            box-shadow: 0 2px 0 #5eead4;
+        }
+        @media print {
+            body { background-color: white; padding: 0; }
+            .a4-canvas { box-shadow: none; max-width: 100%; border: none; }
+            .print-row { display: flex; flex-direction: row !important; gap: 20px; }
+            .print-col { flex: 1; }
+            #usageModal { display: none !important; }
+        }
+        /* 리습 아이템 호버 효과 */
+        .lisp-item {
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+            padding: 0.5rem;
+            margin: -0.5rem;
+            border-radius: 0.5rem;
+        }
+        .lisp-item:hover {
+            background-color: #eff6ff; /* blue-50 */
+        }
+        .lisp-item-util:hover {
+            background-color: #f0fdfa; /* teal-50 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="a4-canvas">
+        <!-- Header -->
+        <div class="header-bg text-white p-6 text-center shrink-0">
+            <h1 class="text-3xl font-extrabold tracking-tight mb-2">오토캐드 통합 단축키 요약본</h1>
+            <p class="text-blue-100 font-medium text-lg">필수 기본 단축키 & 업무 최적화 리습(Q 시리즈 + 유틸리티)</p>
+        </div>
+
+        <!-- Content Area -->
+        <div class="p-6 flex flex-col lg:flex-row gap-6 print-row flex-1">
+            
+            <!-- ========================================== -->
+            <!-- 왼쪽: 오토캐드 기본 단축키 (유지) -->
+            <!-- ========================================== -->
+            <div class="w-full lg:w-1/2 print-col flex flex-col gap-5">
+                
+                <div class="border-b-2 border-gray-800 pb-2 mb-1">
+                    <h2 class="text-2xl font-black text-gray-800 tracking-tight">기본 단축키 (자주 쓰는 기능)</h2>
+                </div>
+
+                <!-- 기본: 작도 관련 -->
+                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-5 shadow-sm">
+                    <h3 class="text-lg font-bold text-emerald-900 mb-4 flex items-center border-b border-emerald-200 pb-2">
+                        <span class="text-xl mr-2">✏️</span> 작도 관련
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">L</span></div>
+                            <div><p class="font-bold text-gray-900 leading-tight mt-1">선 (Line)</p></div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">PL</span></div>
+                            <div><p class="font-bold text-gray-900 leading-tight mt-1">연속선 (Polyline)</p></div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">C</span></div>
+                            <div><p class="font-bold text-gray-900 leading-tight mt-1">원 (Circle)</p></div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic" style="font-size: 0.9rem;">REC</span></div>
+                            <div><p class="font-bold text-gray-900 leading-tight mt-1">사각형 (Rectangle)</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 기본: 편집 관련 -->
+                <div class="bg-gray-50 border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center border-b border-gray-200 pb-2">
+                        <span class="text-xl mr-2">🛠️</span> 편집 관련
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-2 gap-y-4">
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">M</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">이동 (Move)</p>
+                                <p class="text-xs text-gray-500">객체 이동</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">CO</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">복사 (Copy)</p>
+                                <p class="text-xs text-gray-500">객체 복사</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">RO</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">회전 (Rotate)</p>
+                                <p class="text-xs text-gray-500">지정 각도 회전</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">O</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">간격 띄우기 (Offset)</p>
+                                <p class="text-xs text-gray-500">평행 복사</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">TR</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">자르기 (Trim)</p>
+                                <p class="text-xs text-gray-500">교차선 자르기</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">EX</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">연장 (Extend)</p>
+                                <p class="text-xs text-gray-500">경계까지 늘리기</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">F</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">모깎기 (Fillet)</p>
+                                <p class="text-xs text-gray-500">모서리 둥글게</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">MI</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">대칭 (Mirror)</p>
+                                <p class="text-xs text-gray-500">대칭 복사</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">S</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">신축 (Stretch)</p>
+                                <p class="text-xs text-gray-500">객체 늘리기/줄이기</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">X</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">분해 (Explode)</p>
+                                <p class="text-xs text-gray-500">블록/폴리선 깨기</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 기본: 측정 및 기타 -->
+                <div class="bg-purple-50 border border-purple-200 rounded-xl p-5 shadow-sm flex-1">
+                    <h3 class="text-lg font-bold text-purple-900 mb-4 flex items-center border-b border-purple-200 pb-2">
+                        <span class="text-xl mr-2">📐</span> 측정 및 치수
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">DI</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">거리 측정</p>
+                                <p class="text-xs text-gray-500 mt-0.5">두 점 사이 거리</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">DLI</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">선형 치수</p>
+                                <p class="text-xs text-gray-500 mt-0.5">가로/세로 치수 기입</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">DAL</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">정렬 치수</p>
+                                <p class="text-xs text-gray-500 mt-0.5">사선/대각선 치수 기입</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">DAN</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">각도 치수</p>
+                                <p class="text-xs text-gray-500 mt-0.5">두 선 사이 각도 기입</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-basic">DRA</span></div>
+                            <div>
+                                <p class="font-bold text-gray-900">반지름 치수</p>
+                                <p class="text-xs text-gray-500 mt-0.5">원/호 반지름 기입</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+
+            <!-- ========================================== -->
+            <!-- 오른쪽: 리습 (Q 시리즈) & 유틸리티 단축키 -->
+            <!-- ========================================== -->
+            <div class="w-full lg:w-1/2 print-col flex flex-col gap-4">
+                
+                <div class="border-b-2 border-blue-600 pb-2 mb-1 flex items-end">
+                    <h2 class="text-2xl font-black text-blue-800 tracking-tight">전용 리습 (Q 시리즈 & 유틸리티)</h2>
+                    <span class="text-[11px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full ml-3 border border-blue-200 shadow-sm animate-pulse">💡 더블클릭: 사용법 보기</span>
+                </div>
+
+                <!-- 리습: 레이어 관리 -->
+                <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <h3 class="text-md font-bold text-gray-800 mb-3 flex items-center border-b pb-2">
+                        <span class="text-lg mr-2">📁</span> 키보드 1열 (Q, W, E, R) : 레이어 관리
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-4">
+                        <div class="flex items-start lisp-item" data-cmd="QQ">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-q">QQ</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">전용 레이어 생성</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">'hong001' 생성 및 작업 설정</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item" data-cmd="QW">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-q">QW</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">선택 레이어 변경</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">선택 객체를 'hong001'로 이동</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item" data-cmd="QE">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-q">QE</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">선택 레이어만 켬</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">선택 객체 층만 켬 (SF 동일)</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item" data-cmd="QR">
+                            <div class="mr-3 shrink-0"><span class="kbd-key kbd-q">QR</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">모든 레이어 켜기</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">모든 레이어 즉시 켬 (AT 동일)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 리습: 계산 및 텍스트 (QC 삭제 완료) -->
+                <div class="bg-blue-50 border border-blue-100 rounded-xl p-5 shadow-sm">
+                    <h3 class="text-md font-bold text-blue-900 mb-3 flex items-center border-b border-blue-200 pb-2">
+                        <span class="text-lg mr-2">📏</span> 키보드 2열 (A, S, D, F) : 계산 및 텍스트
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-4">
+                        <div class="flex items-start lisp-item" data-cmd="QA">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-blue-800 border-blue-300 shadow-blue-200">QA</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">여러 객체 길이 합산</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">길이 및 <b>총합산</b> 수치 팝업</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item" data-cmd="QS">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-blue-800 border-blue-300 shadow-blue-200">QS</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">여러 객체 면적 합산</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">면적 및 <b>총합산</b> 수치 팝업</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item" data-cmd="QD">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-blue-800 border-blue-300 shadow-blue-200">QD</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">단일 객체 길이 기입</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">선택 후 클릭 위치에 길이 기입</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item" data-cmd="QF">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-blue-800 border-blue-300 shadow-blue-200">QF</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">면적(M2,PY)+둘레 기입</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">공간 클릭하여 문자 자동 기입</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 리습: 도면 그리기 -->
+                <div class="bg-orange-50 border border-orange-100 rounded-xl p-5 shadow-sm">
+                    <h3 class="text-md font-bold text-orange-900 mb-3 flex items-center border-b border-orange-200 pb-2">
+                        <span class="text-lg mr-2">✍️</span> 키보드 3열 (Z, X, V) : 도면 그리기
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-4">
+                        <div class="flex items-start lisp-item" data-cmd="QZ">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-orange-800 border-orange-300 shadow-orange-200">QZ</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">벽체 그리기</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">중심선 선택 후 벽 두께 생성</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item" data-cmd="QX">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-orange-800 border-orange-300 shadow-orange-200">QX</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">중심선 자동 생성</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">두 선 사이 관통 중심선 작도</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item md:col-span-2" data-cmd="QV">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-orange-800 border-orange-300 shadow-orange-200">QV</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">단열재 그리기</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">두께 및 시작/끝점 지정하여 단열재 패턴 작도</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 리습: 도면 유틸리티 (폰트/삽입) -->
+                <div class="bg-teal-50 border border-teal-200 rounded-xl p-5 shadow-sm flex-1">
+                    <h3 class="text-md font-bold text-teal-900 mb-3 flex items-center border-b border-teal-200 pb-2">
+                        <span class="text-lg mr-2">🛠️</span> 도면 유틸리티 (폰트 복구 & 다중 삽입)
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-4">
+                        <div class="flex items-start lisp-item lisp-item-util" data-cmd="STF">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-teal-800 border-teal-300 shadow-teal-200">STF</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">스마트 폰트 변환</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">누락된 폰트만 '굴림' 복구</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item lisp-item-util" data-cmd="STG">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-teal-800 border-teal-300 shadow-teal-200">STG</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">강제 폰트 일괄 변환</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">모든 폰트 스타일 '굴림' 지정</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item lisp-item-util" data-cmd="CDFA">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-teal-800 border-teal-300 shadow-teal-200" style="font-size:0.9rem;">CDFA</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">도면 개별 연속 삽입</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">위치 클릭하며 도면 연속 로드</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item lisp-item-util" data-cmd="CDFB">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-teal-800 border-teal-300 shadow-teal-200" style="font-size:0.9rem;">CDFB</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">폴더 일괄 다중 삽입</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">폴더 내 도면 지정간격 나란히</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item lisp-item-util" data-cmd="CR">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-teal-800 border-teal-300 shadow-teal-200">CR</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">중앙 정렬 및 블록화</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">선택 객체를 두 점 중앙 이동</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start lisp-item lisp-item-util" data-cmd="CTE">
+                            <div class="mr-3 shrink-0"><span class="kbd-key bg-white text-teal-800 border-teal-300 shadow-teal-200">CTE</span></div>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm">CAD 표 ➔ 엑셀 복사</h4>
+                                <p class="text-xs text-gray-600 mt-0.5 leading-tight">문자를 표 구조 그대로 복사</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Footer Note -->
+        <div class="bg-gray-800 text-gray-300 text-[13px] p-3 text-center mt-auto shrink-0">
+            <p>💡 <b>LISP 설치 방법:</b> 캐드 명령어 창에 <code class="bg-gray-700 text-white px-2 py-0.5 rounded mx-1">APPLOAD</code>를 입력하거나 lsp 파일을 도면으로 드래그 앤 드롭</p>
+        </div>
+    </div>
+
+    <!-- 더블클릭 모달 팝업 -->
+    <div id="usageModal" class="fixed inset-0 bg-gray-900 bg-opacity-60 hidden flex justify-center items-center z-50 transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-7 max-w-md w-full mx-4 transform transition-all border border-gray-100">
+            <div class="flex justify-between items-center mb-5 border-b pb-3 border-gray-100">
+                <h3 id="modalTitle" class="text-xl font-black text-blue-900 flex items-center">
+                    <span class="mr-2 text-2xl">💡</span> <span id="modalTitleText">사용법</span>
+                </h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-800 transition-colors bg-gray-50 hover:bg-gray-100 p-1.5 rounded-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="mb-7">
+                <p id="modalDesc" class="text-gray-700 text-[15px] leading-relaxed bg-blue-50/50 p-5 rounded-xl border border-blue-100"></p>
+            </div>
+            <div class="text-center">
+                <button onclick="closeModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-8 rounded-xl transition-all shadow-md shadow-blue-200 active:scale-95">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 리습 단축키별 상세 사용 방법 데이터
+        const lispInstructions = {
+            'QQ': { title: 'QQ (전용 레이어 생성)', desc: '명령어 창에 <kbd class="font-bold text-blue-700">QQ</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>도면에 <b>hong001</b> 레이어가 없다면 자동으로 생성하고, 즉시 현재 작업 레이어로 설정합니다.' },
+            'QW': { title: 'QW (선택 레이어 변경)', desc: '도면에서 객체 선택 ➔ 명령어 <kbd class="font-bold text-blue-700">QW</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>선택한 선, 호, 해치 등 모든 객체들을 <b>hong001</b> 전용 레이어로 일괄 변경합니다.' },
+            'QE': { title: 'QE (선택 레이어만 켬)', desc: '남겨둘 레이어의 객체 선택 ➔ 명령어 <kbd class="font-bold text-blue-700">QE</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>선택한 객체와 <b>동일한 레이어만 켜두고</b> 나머지 레이어는 초고속 엔진으로 즉시 끕니다.<br><span class="text-sm text-gray-500 mt-2 block">※ 단축키 <kbd class="font-mono bg-gray-200 px-1 rounded">SF</kbd> 와 동일한 기능</span>' },
+            'QR': { title: 'QR (모든 레이어 켜기)', desc: '명령어 창에 <kbd class="font-bold text-blue-700">QR</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>도면 내에 꺼져있는 <b>모든 레이어</b>를 초고속 엔진으로 한 번에 즉시 켭니다.<br><span class="text-sm text-gray-500 mt-2 block">※ 단축키 <kbd class="font-mono bg-gray-200 px-1 rounded">AT</kbd> 와 동일한 기능</span>' },
+            
+            'QA': { title: 'QA (여러 객체 길이 합산)', desc: '선, 폴리선 등 여러 객체 선택 ➔ 명령어 <kbd class="font-bold text-blue-700">QA</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>선택한 객체들의 개수, 각 객체별 길이, 그리고 <b>총 합산 길이</b>를 팝업창과 프롬프트 창에 표시합니다.' },
+            'QS': { title: 'QS (여러 객체 면적 합산)', desc: '닫힌 객체 여러 개 선택 ➔ 명령어 <kbd class="font-bold text-blue-700">QS</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>계산 가능한 닫힌 객체들의 개수, 각 면적, 그리고 <b>총 합산 면적</b>을 팝업창과 프롬프트 창에 표시합니다.' },
+            'QD': { title: 'QD (단일 객체 길이 기입)', desc: '명령어 <kbd class="font-bold text-blue-700">QD</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd> ➔ 선 1개 선택 ➔ 문자를 기입할 위치 <b>클릭</b><br><br>클릭한 위치 도면 위에 해당 선의 길이(mm) 텍스트를 자동 기입합니다.<br><br><span class="text-[13px] text-blue-800 bg-blue-100/40 p-2.5 rounded-lg block border border-blue-200">💡 글자크기는 도면스케일*TEXTSIZE로 자동 크기 조정됩니다.<br>우선 1개 해보고 <b>TEXTSIZE</b>명령어로 도면의 기본 텍스트 크기를 조정해두면 원하는 크기로 계속 생성할 수 있습니다.</span>' },
+            'QF': { title: 'QF (면적+둘레 문자 기입)', desc: '명령어 <kbd class="font-bold text-blue-700">QF</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd> ➔ 닫힌 공간 안쪽 <b>클릭</b>(또는 선 선택) ➔ 문자 위치 클릭<br><br>클릭한 위치에 해당 공간의 면적(㎡ 및 평수)과 둘레(mm) 텍스트를 자동 기입합니다.<br><br><span class="text-[13px] text-blue-800 bg-blue-100/40 p-2.5 rounded-lg block border border-blue-200">💡 글자크기는 도면스케일*TEXTSIZE로 자동 크기 조정됩니다.<br>우선 1개 해보고 <b>TEXTSIZE</b>명령어로 도면의 기본 텍스트 크기를 조정해두면 원하는 크기로 계속 생성할 수 있습니다.</span>' },
+            
+            'QZ': { title: 'QZ (벽체 그리기)', desc: '명령어 <kbd class="font-bold text-blue-700">QZ</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd> ➔ 벽 두께 입력(기본값 200) ➔ <b>기준 중심선 선택</b><br><br>선택한 중심선을 기준으로 지정한 두께만큼 양쪽으로 벽체 라인을 자동 생성합니다.' },
+            'QX': { title: 'QX (중심선 자동 생성)', desc: '명령어 <kbd class="font-bold text-blue-700">QX</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd> ➔ 두 개의 선 또는 폴리선 <b>선택</b><br><br>선택한 두 선 사이의 정중앙을 관통하는 중심선(Polyline)을 자동으로 작도합니다.' },
+            'QV': { title: 'QV (단열재 그리기)', desc: '명령어 <kbd class="font-bold text-blue-700">QV</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd> ➔ 단열재 두께 입력 ➔ <b>시작점 클릭 ➔ 끝점 클릭</b><br><br>지정한 두께와 시작/끝점 길이에 맞춰 단열재 패턴(Pline)을 자동으로 작도합니다.' },
+            
+            'STF': { title: 'STF (스마트 폰트 변환)', desc: '명령어 창에 <kbd class="font-bold text-teal-700">STF</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>도면을 스캔하여 <b>PC에 없거나 깨진(누락된) 폰트만 골라내어</b> 안전한 "굴림" 폰트로 자동 복구합니다.' },
+            'STG': { title: 'STG (강제 폰트 일괄 변환)', desc: '명령어 창에 <kbd class="font-bold text-teal-700">STG</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd><br><br>도면 내에 존재하는 <b>모든 문자 스타일</b>을 조건 없이 "굴림" 폰트로 일괄 강제 변경합니다.' },
+            'CDFA': { title: 'CDFA (도면 개별 연속 삽입)', desc: '명령어 <kbd class="font-bold text-teal-700">CDFA</kbd> 입력 ➔ 도면 삽입 위치(기준점) <b>클릭</b> ➔ 파일 선택창에서 도면 선택 ➔ 삽입 및 분해 ➔ 다음 위치 클릭 (반복)<br><br>마우스 클릭 위치마다 도면을 즉시 로드 및 분해(Explode)하며, <kbd class="bg-gray-200 px-1 rounded text-xs font-mono">ESC</kbd>를 누를 때까지 연속 작업됩니다.<br><br><span class="text-[13px] text-teal-800 bg-teal-50 p-2.5 rounded-lg block border border-teal-200">💡 기존 1개 도면을 나누어 저장되어있는 경우 XY값이 이미 간격에 맞춰 저장되어있으므로 <b>같은 점을 계속 누르며 추가하면</b> 기존 의도대로 정렬될 수 있습니다.</span>' },
+            'CDFB': { title: 'CDFB (폴더 일괄 다중 삽입)', desc: '명령어 <kbd class="font-bold text-teal-700">CDFB</kbd> 입력 ➔ 일괄 삽입할 <b>폴더 선택</b> ➔ 도면이 깔릴 <b>시작점 클릭</b> ➔ 도면 간격 입력(예: 20000)<br><br>폴더 내 모든 DWG 도면이 지정된 X축 간격에 맞춰 블록 상태로 나란히 일괄 자동 삽입됩니다.' },
+            'CR': { title: 'CR (중앙 정렬 및 블록화)', desc: '명령어 <kbd class="font-bold text-teal-700">CR</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd> ➔ 중앙으로 모을 객체들 <b>선택</b> ➔ 첫 번째 기준점 클릭 ➔ 반대쪽(대각선) 기준점 클릭<br><br>선택한 객체들을 묶은 뒤, 사용자가 지정한 두 점의 정중앙으로 빠르고 정확하게 이동시킵니다.' },
+            'CTE': { title: 'CTE (CAD 표 ➔ 엑셀 복사)', desc: '명령어 <kbd class="font-bold text-teal-700">CTE</kbd> 입력 ➔ <kbd class="bg-white border border-gray-300 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd> ➔ 복사할 캐드 문자(표) <b>드래그 선택</b><br><br>도면의 문자들이 엑셀의 줄(행)과 칸(열) 구조 그대로 클립보드에 복사됩니다. 엑셀을 열고 <kbd class="bg-gray-200 px-1 rounded text-xs font-mono">Ctrl+V</kbd>를 눌러서 바로 붙여넣기 하세요!<br><br><span class="text-[13px] text-teal-800 bg-teal-50 p-2.5 rounded-lg block border border-teal-200">💡 문자들의 X/Y 좌표 간격을 자동으로 인식해 표 형태를 완벽하게 유지하여 복사합니다.</span>' }
+        };
+
+        // 팝업 열기/닫기 함수
+        function openModal(title, desc) {
+            document.getElementById('modalTitleText').innerText = title;
+            document.getElementById('modalDesc').innerHTML = desc;
+            document.getElementById('usageModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('usageModal').classList.add('hidden');
+        }
+
+        // 각 리습 항목에 마우스 툴팁 및 더블클릭 이벤트 리스너 추가
+        document.querySelectorAll('.lisp-item').forEach(item => {
+            item.title = "더블클릭하여 상세 사용법 보기";
+            item.addEventListener('dblclick', () => {
+                const cmd = item.getAttribute('data-cmd');
+                const info = lispInstructions[cmd];
+                if(info) {
+                    openModal(info.title, info.desc);
+                }
+            });
+        });
+
+        // 팝업 바깥 영역 클릭 시 닫기
+        window.onclick = function(event) {
+            const modal = document.getElementById('usageModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>위험성평가 자동화 시스템</title>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ExcelJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* Custom Scrollbar for tables */
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        
+        /* Table Sticky Header */
+        th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        [v-cloak] {
+            display: none;
+        }
+
+        /* 성공 피드백 애니메이션 */
+        @keyframes successPop {
+            0% { opacity: 0; transform: scale(0.9) translateY(20px); }
+            15% { opacity: 1; transform: scale(1.02) translateY(0); }
+            25% { transform: scale(1) translateY(0); }
+            80% { opacity: 1; transform: scale(1) translateY(0); }
+            100% { opacity: 0; transform: scale(0.9) translateY(-20px); }
+        }
+        .animate-success-pop {
+            animation: successPop 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased h-screen flex flex-col overflow-hidden">
+    <div id="app" v-cloak class="h-full flex flex-col">
+        
+        <!-- ────── Top Bar ────── -->
+        <header class="bg-white shadow-sm border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-6">
+                <h1 class="text-2xl font-bold flex items-center" style="color:#0a3c6d;">
+                    <i class="fa-solid fa-hard-hat mr-2 text-yellow-500"></i>위험성평가 프로그램
+                    <i @click="showManual = true" class="fa-solid fa-circle-question ml-3 text-slate-400 hover:text-blue-600 cursor-pointer text-[1.4rem] transition-colors" title="사용 매뉴얼"></i>
+                </h1>
+                
+                <!-- Evaluation Type Toggle (최초 / 상시) -->
+                <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button @click="evalType = '최초'" :class="{'bg-white shadow text-blue-700 font-bold': evalType === '최초', 'text-slate-500': evalType !== '최초'}" class="px-4 py-1.5 rounded-md transition-all duration-200">
+                        [최초] 평가
+                    </button>
+                    <button @click="evalType = '상시'" :class="{'bg-white shadow text-blue-700 font-bold': evalType === '상시', 'text-slate-500': evalType !== '상시'}" class="px-4 py-1.5 rounded-md transition-all duration-200">
+                        [상시] 평가
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <!-- 추후 활성화될 Firebase 더미 버튼들 (UI에서 감춤: hidden) -->
+                <button @click="dummyFirebaseLoad" class="hidden bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 px-4 py-2 rounded-lg font-medium transition text-sm">
+                    <i class="fa-solid fa-cloud-arrow-down mr-1"></i> DB 불러오기
+                </button>
+                <button @click="dummyFirebaseSave" class="hidden bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 px-4 py-2 rounded-lg font-medium transition text-sm mr-4">
+                    <i class="fa-solid fa-cloud-arrow-up mr-1"></i> DB 저장하기
+                </button>
+
+                <button @click="triggerFileLoad" class="bg-white text-slate-600 border border-slate-300 hover:bg-slate-50 px-4 py-2 rounded-lg font-medium transition text-sm">
+                    <i class="fa-solid fa-folder-open mr-1"></i> 파일 열기
+                </button>
+                <input type="file" ref="fileInput" @change="loadAllFromJson" accept=".json" class="hidden">
+                
+                <button @click="saveAllToJson" class="bg-white text-slate-600 border border-slate-300 hover:bg-slate-50 px-4 py-2 rounded-lg font-medium transition text-sm">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i> 파일 저장
+                </button>
+                <button @click="exportExcel" class="bg-[#0a3c6d] hover:bg-blue-800 text-white px-5 py-2 rounded-lg font-bold shadow-md transition text-sm">
+                    <i class="fa-solid fa-file-excel mr-1"></i> 엑셀 출력
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-auto p-6">
+            <div class="max-w-7xl mx-auto space-y-6">
+                
+                <!-- ────── 기본정보 입력 구역 ────── -->
+                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold mb-4 text-slate-700 border-b pb-2"><i class="fa-solid fa-circle-info mr-2"></i>기본정보 입력</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-600 mb-1">공사명</label>
+                            <input v-model="basicInfo.공사명" type="text" class="w-full border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="공사명 입력">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-600 mb-1">시공사</label>
+                            <input v-model="basicInfo.시공사" type="text" class="w-full border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="시공사 입력">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-600 mb-1">현장소장</label>
+                            <input v-model="basicInfo.현장소장" type="text" class="w-full border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="소장명 입력">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-600 mb-1">작성기준일 <span class="text-xs text-slate-400 font-normal ml-1">(YYYY-MM-DD)</span></label>
+                            <input v-model="basicInfo.작성기준일" @input="formatDateInput" type="text" maxlength="10" placeholder="예: 2026-03-24" class="w-full border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ────── 필터 구역 ────── -->
+                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4">
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <div class="w-64">
+                            <label class="block text-sm font-bold text-slate-600 mb-1">공종명</label>
+                            <select v-model="searchGongjong" @change="searchJob = ''; searchUnitJob = '';" class="w-full border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">전체 공종</option>
+                                <option v-for="g in gongjongList" :key="g" :value="g">{{ g }}</option>
+                            </select>
+                        </div>
+                        <div class="w-64">
+                            <label class="block text-sm font-bold text-slate-600 mb-1">작업명</label>
+                            <select v-model="searchJob" @change="searchUnitJob = '';" class="w-full border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">전체 작업</option>
+                                <option v-for="j in jobList" :key="j" :value="j">{{ j }}</option>
+                            </select>
+                        </div>
+                        <div class="w-64">
+                            <label class="block text-sm font-bold text-slate-600 mb-1">단위작업명</label>
+                            <select v-model="searchUnitJob" class="w-full border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">전체 단위작업</option>
+                                <option v-for="uj in unitJobList" :key="uj" :value="uj">{{ uj }}</option>
+                            </select>
+                        </div>
+                        <button @click="applyFilter" class="bg-slate-800 hover:bg-slate-700 text-white px-6 py-2 rounded-md font-medium transition h-[42px]">
+                            필터 적용
+                        </button>
+                    </div>
+
+                    <!-- 동적 기인물 필터 토글 구역 -->
+                    <div v-if="availableGiinmuls.length > 0" class="pt-4 border-t border-slate-100 animate-fade-in">
+                        <label class="block text-sm font-bold text-slate-600 mb-2">기인물 다중 필터 <span class="font-normal text-xs text-slate-400">(여러 개 선택 가능, 실시간 변동)</span></label>
+                        <div class="flex flex-wrap gap-2">
+                            <button @click="toggleGiinmul('전체')"
+                                    :class="selectedGiinmuls.length === 0 ? 'bg-blue-100 text-blue-800 border-blue-300 font-bold shadow-sm ring-1 ring-blue-400' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'"
+                                    class="px-4 py-1.5 text-sm border rounded-full transition-all duration-200">
+                                전체 기인물
+                            </button>
+                            <button v-for="g in availableGiinmuls" :key="g"
+                                    @click="toggleGiinmul(g)"
+                                    :class="selectedGiinmuls.includes(g) ? 'bg-blue-100 text-blue-800 border-blue-300 font-bold shadow-sm ring-1 ring-blue-400' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'"
+                                    class="px-4 py-1.5 text-sm border rounded-full transition-all duration-200">
+                                {{ g }}
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 상하 분할(flex-col) 뷰 -->
+                <div class="flex flex-col gap-6">
+                    <!-- ────── 리스트 1 (검색된 평가요인) ────── -->
+                    <div class="flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-[400px]">
+                        <div class="bg-slate-100 px-4 py-3 border-b border-slate-200 flex justify-between items-center shrink-0">
+                            <h3 class="font-bold text-slate-700">검색된 평가요인 
+                                <span class="text-blue-600 text-sm ml-2">{{ table1Data.length }}건</span>
+                                <span v-if="selectedGiinmuls.length > 0" class="text-slate-500 text-xs ml-1">(전체 {{ filteredRawList.length }}건 중)</span>
+                            </h3>
+                            <div class="flex gap-2">
+                                <button @click="selectAll(table1Data, true)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-50">현재 목록 전체선택</button>
+                                <button @click="selectAll(table1Data, false)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-50">체크해제</button>
+                                <button @click="moveSelected" class="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 font-bold shadow-sm">선택요인 아래로 추가 <i class="fa-solid fa-arrow-down ml-1"></i></button>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-auto table-container">
+                            <table class="w-full text-sm text-left whitespace-nowrap">
+                                <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-xs">
+                                    <tr>
+                                        <th class="px-3 py-3 w-10 text-center bg-slate-50"><i class="fa-solid fa-check"></i></th>
+                                        <th class="px-4 py-3 bg-slate-50">공종명</th>
+                                        <th class="px-4 py-3 bg-slate-50">기인물</th>
+                                        <th class="px-4 py-3 bg-slate-50">재해유발요인</th>
+                                        <th class="px-4 py-3 bg-slate-50">감소대책(예시)1</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(item, index) in table1Data" :key="index" class="border-b hover:bg-blue-50 transition cursor-pointer" @click="item._selected = !item._selected">
+                                        <td class="px-3 py-3 text-center" @click.stop>
+                                            <input type="checkbox" v-model="item._selected" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                                        </td>
+                                        <td class="px-4 py-3 text-slate-700">{{ item.공종명 }}</td>
+                                        <td class="px-4 py-3 text-slate-700 truncate max-w-[200px]" :title="item.기인물">{{ item.기인물 }}</td>
+                                        <td class="px-4 py-3 text-slate-700 truncate max-w-[300px]" :title="item.재해유발요인">{{ item.재해유발요인 }}</td>
+                                        <td class="px-4 py-3 text-slate-700 truncate max-w-[400px]" :title="item['위험성 감소대책(예시)1']">{{ item['위험성 감소대책(예시)1'] }}</td>
+                                    </tr>
+                                    <tr v-if="filteredRawList.length === 0">
+                                        <td colspan="5" class="px-6 py-10 text-center text-slate-400">필터를 적용하여 데이터를 검색해주세요.</td>
+                                    </tr>
+                                    <tr v-else-if="table1Data.length === 0">
+                                        <td colspan="5" class="px-6 py-10 text-center text-slate-400">해당 기인물에 해당하는 데이터가 없습니다.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- ────── 리스트 2 (선택된 평가요인) ────── -->
+                    <div class="flex flex-col bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden ring-1 ring-blue-100 h-[400px]">
+                        <div class="bg-blue-50 px-4 py-3 border-b border-blue-200 flex justify-between items-center shrink-0">
+                            <h3 class="font-bold text-blue-900">선택된 최종 평가요인 <span class="text-blue-600 text-sm ml-2">{{ table2Data.length }}건</span></h3>
+                            <div class="flex gap-2">
+                                <button @click="selectAll(table2Data, true)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-50">전체선택</button>
+                                <button @click="selectAll(table2Data, false)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-50">체크해제</button>
+                                <button @click="deleteChecked" class="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded hover:bg-red-100">선택삭제</button>
+                                <button @click="clearAll" class="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-bold shadow-sm"><i class="fa-solid fa-trash-can mr-1"></i>전체삭제</button>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-auto table-container">
+                            <table class="w-full text-sm text-left whitespace-nowrap">
+                                <thead class="bg-blue-50 text-blue-800 font-bold uppercase text-xs">
+                                    <tr>
+                                        <th class="px-3 py-3 w-10 text-center bg-blue-50"><i class="fa-solid fa-check"></i></th>
+                                        <th class="px-4 py-3 bg-blue-50">공종명</th>
+                                        <th class="px-4 py-3 bg-blue-50">기인물</th>
+                                        <th class="px-4 py-3 bg-blue-50">재해유발요인</th>
+                                        <th class="px-4 py-3 bg-blue-50">감소대책(예시)1</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(item, index) in table2Data" :key="index" class="border-b hover:bg-blue-50 transition cursor-pointer" @click="item._selected = !item._selected">
+                                        <td class="px-3 py-3 text-center" @click.stop>
+                                            <input type="checkbox" v-model="item._selected" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                                        </td>
+                                        <td class="px-4 py-3 text-slate-700">{{ item.공종명 }}</td>
+                                        <td class="px-4 py-3 text-slate-700 truncate max-w-[200px]" :title="item.기인물">{{ item.기인물 }}</td>
+                                        <td class="px-4 py-3 text-slate-700 truncate max-w-[300px]" :title="item.재해유발요인">{{ item.재해유발요인 }}</td>
+                                        <td class="px-4 py-3 text-slate-700 truncate max-w-[400px]" :title="item['위험성 감소대책(예시)1']">{{ item['위험성 감소대책(예시)1'] }}</td>
+                                    </tr>
+                                    <tr v-if="table2Data.length === 0">
+                                        <td colspan="5" class="px-6 py-10 text-center text-slate-400">위 검색 목록에서 요인을 선택해 추가해주세요.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ────── 사용 매뉴얼 모달 ────── -->
+        <div v-if="showManual" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-fade-in">
+                <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0 bg-slate-50 rounded-t-xl">
+                    <h2 class="text-xl font-bold text-[#0a3c6d]"><i class="fa-solid fa-book-open mr-2 text-blue-600"></i>위험성평가 자동화 시스템 사용 매뉴얼</h2>
+                    <button @click="showManual = false" class="text-slate-400 hover:text-red-500 transition text-3xl leading-none">&times;</button>
+                </div>
+                <div class="p-8 overflow-y-auto flex-1 space-y-8 text-slate-700 text-sm leading-relaxed">
+                    
+                    <div>
+                        <h3 class="text-base font-bold text-blue-800 mb-2 border-l-4 border-blue-600 pl-3">1. 시스템 개요</h3>
+                        <p class="pl-4">본 프로그램은 건설 현장의 <strong>[최초/상시] 위험성평가</strong> 업무를 자동화하여 엑셀 문서 작성 시간을 획기적으로 단축해 주는 시스템입니다. 공종/작업별 위험요인을 클릭만으로 쉽게 선택하고, 자동으로 표준화된 엑셀 서식에 맞게 분리 출력할 수 있습니다.</p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-base font-bold text-blue-800 mb-2 border-l-4 border-blue-600 pl-3">2. 평가 유형 및 기본정보 입력</h3>
+                        <ul class="list-disc list-inside pl-4 space-y-2">
+                            <li><strong>평가 유형:</strong> 화면 우측 상단에서 <strong>[최초] 평가</strong> 또는 <strong>[상시] 평가</strong>를 선택합니다. 선택한 유형에 맞는 엑셀 템플릿이 자동으로 적용됩니다.</li>
+                            <li><strong>기본정보:</strong> 공사명, 시공사(기본값 적용됨), 현장소장, 작성기준일을 입력합니다.</li>
+                            <li><span class="text-blue-600 font-bold ml-5"><i class="fa-solid fa-circle-info"></i> Tip:</span> 작성기준일은 숫자 8자리(예: 20260324)만 연속으로 입력하면 자동으로 <strong>YYYY-MM-DD</strong> 형식으로 변환됩니다.</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 class="text-base font-bold text-blue-800 mb-2 border-l-4 border-blue-600 pl-3">3. 평가요인 검색 (필터 적용)</h3>
+                        <ul class="list-decimal list-inside pl-4 space-y-2">
+                            <li><strong>공종명</strong>을 먼저 선택합니다.</li>
+                            <li>활성화된 <strong>작업명</strong>을 선택합니다. (필요 시 <strong>단위작업명</strong>까지 상세하게 필터링할 수 있습니다.)</li>
+                            <li>우측의 <strong>[필터 적용]</strong> 버튼을 클릭하면, 하단 리스트에 해당 조건의 평가요인들이 즉시 검색됩니다.</li>
+                            <li><span class="text-blue-600 font-bold ml-5"><i class="fa-solid fa-circle-info"></i> Tip:</span> 검색 단계에서 이미 <strong>동일한 [공종명 + 기인물 + 재해유발요인]은 스마트하게 중복이 제거</strong>되어 깔끔하게 1줄로 표시됩니다. (엑셀 출력 시 숨겨진 세부 감소대책 등은 온전하게 반영됩니다.)</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 class="text-base font-bold text-blue-800 mb-2 border-l-4 border-blue-600 pl-3">4. 기인물 다중 필터 활용 (선택사항)</h3>
+                        <p class="pl-4 mb-2">필터 적용 후, 검색된 항목이 너무 많을 경우 <strong>[기인물 다중 필터]</strong> 토글 버튼이 나타납니다.</p>
+                        <ul class="list-disc list-inside pl-4 space-y-2">
+                            <li>원하는 <strong>기인물 버튼을 클릭</strong>하여 해당하는 항목만 좁혀서 확인할 수 있습니다.</li>
+                            <li><strong>여러 개를 동시 선택(다중 클릭)</strong>하여 원하는 기인물 묶음만 띄워놓고 체크할 수 있습니다.</li>
+                            <li>선택을 해제하거나 <strong>[전체 기인물]</strong>을 누르면 리스트가 원래대로 모두 표시됩니다.</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 class="text-base font-bold text-blue-800 mb-2 border-l-4 border-blue-600 pl-3">5. 평가요인 최종 추가</h3>
+                        <ul class="list-disc list-inside pl-4 space-y-2">
+                            <li><strong>[검색된 평가요인]</strong> 리스트에서 현장에 해당하는 요인의 <strong>체크박스를 선택</strong>합니다.</li>
+                            <li><strong>[선택요인 아래로 추가]</strong> 버튼을 누르면, 체크한 항목들이 하단의 <strong>[선택된 최종 평가요인]</strong> 목록으로 복사됩니다.</li>
+                            <li>기인물 필터(탭)가 가려져 있어 화면에 당장 보이지 않더라도, <strong>체크해 둔 항목은 메모리에 보존되어 한 번에 모두 합산되어 추가</strong>됩니다.</li>
+                            <li>이미 아래에 추가된 요인을 실수로 다시 넣더라도 시스템이 자동으로 중복을 걸러줍니다.</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 class="text-base font-bold text-blue-800 mb-2 border-l-4 border-blue-600 pl-3">6. 엑셀 출력 및 데이터 관리</h3>
+                        <ul class="list-disc list-inside pl-4 space-y-3">
+                            <li>
+                                <strong><i class="fa-solid fa-file-excel text-green-600"></i> 엑셀 출력:</strong> 
+                                모든 요인을 하단 리스트에 담은 후, 우측 상단의 <strong>[엑셀 출력]</strong> 버튼을 누릅니다.<br>
+                                <span class="text-slate-500 ml-6 block mt-1">▶ 프로그램이 템플릿 서식(셀 병합, 테두리, 인쇄 영역 등)을 완벽하게 유지하며, 각 공종별로 시트를 분리하여 단일 엑셀 문서로 자동 생성합니다.</span>
+                            </li>
+                            <li>
+                                <strong><i class="fa-solid fa-floppy-disk text-slate-500"></i> 파일 저장/열기:</strong> 
+                                진행 중이거나 자주 쓰는 현장 세팅을 <strong>[파일 저장] (JSON 포맷)</strong> 해두었다가 언제든 <strong>[파일 열기]</strong>로 복구하여 이어할 수 있습니다.
+                            </li>
+                        </ul>
+                    </div>
+
+                </div>
+                <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end shrink-0 rounded-b-xl">
+                    <button @click="showManual = false" class="bg-slate-800 hover:bg-slate-700 text-white px-8 py-2.5 rounded-lg font-bold transition shadow-sm">확인 및 닫기</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 커스텀 알림 모달 -->
+        <div v-if="modal.show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 transform transition-all">
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full" 
+                         :class="modal.type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'">
+                        <i class="fa-solid fa-circle-exclamation text-xl" v-if="modal.type === 'error'"></i>
+                        <i class="fa-solid fa-circle-info text-xl" v-else></i>
+                    </div>
+                    <h3 class="mt-4 text-lg font-bold text-slate-900">{{ modal.title }}</h3>
+                    <p class="mt-2 text-sm text-slate-500 whitespace-pre-line">{{ modal.message }}</p>
+                </div>
+                <div class="mt-6 flex justify-center gap-3">
+                    <button v-if="modal.showCancel" @click="modal.resolve(false); modal.show = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium w-full">취소</button>
+                    <button @click="modal.resolve(true); modal.show = false" class="px-4 py-2 text-white rounded-lg font-medium w-full" :class="modal.type === 'error' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'">확인</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로딩 오버레이 -->
+        <div v-if="isLoading" class="fixed inset-0 bg-white bg-opacity-80 flex flex-col items-center justify-center z-50">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600 mb-4"></div>
+            <p class="text-lg font-bold text-blue-900">{{ loadingMsg }}</p>
+        </div>
+
+        <!-- ────── 추가 성공 대형 피드백 배너 ────── -->
+        <div v-if="showSuccessBanner" class="fixed inset-0 flex items-center justify-center z-[80] pointer-events-none px-6">
+            <div class="w-full max-w-7xl h-[200px] bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-2xl shadow-[0_20px_50px_rgba(37,99,235,0.5)] flex flex-col items-center justify-center animate-success-pop border-4 border-white border-opacity-20">
+                <i class="fa-solid fa-check-circle text-5xl mb-3 text-green-300"></i>
+                <h2 class="text-3xl font-extrabold tracking-tight">{{ successBannerCount }}건의 평가요인이 성공적으로 추가되었습니다!</h2>
+                <p class="mt-2 text-blue-100 font-medium text-lg">아래 [선택된 최종 평가요인] 목록을 확인해주세요.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+        const URLS = {
+            riskDB: "https://hongstar2776-cmyk.github.io/My-Dashboard/resource/riskDB.json",
+            monthlyTemplate: "https://hongstar2776-cmyk.github.io/My-Dashboard/resource/teplate_RA_monthly.xlsx",
+            firstTemplate: "https://hongstar2776-cmyk.github.io/My-Dashboard/resource/template_RA_first.xlsx"
+        };
+
+        const app = createApp({
+            setup() {
+                const evalType = ref('최초');
+                const showManual = ref(false);
+                const showSuccessBanner = ref(false);
+                const successBannerCount = ref(0);
+                const isLoading = ref(false);
+                const loadingMsg = ref('');
+                const fileInput = ref(null);
+                
+                const modal = reactive({
+                    show: false, title: '', message: '', type: 'info', showCancel: false, resolve: null
+                });
+
+                const showAlert = (title, message, type = 'info') => {
+                    return new Promise((resolve) => {
+                        modal.title = title; modal.message = message; modal.type = type;
+                        modal.showCancel = false; modal.resolve = resolve; modal.show = true;
+                    });
+                };
+
+                const showConfirm = (title, message) => {
+                    return new Promise((resolve) => {
+                        modal.title = title; modal.message = message; modal.type = 'info';
+                        modal.showCancel = true; modal.resolve = resolve; modal.show = true;
+                    });
+                };
+
+                const triggerSuccessBanner = (count) => {
+                    successBannerCount.value = count;
+                    showSuccessBanner.value = true;
+                    setTimeout(() => {
+                        showSuccessBanner.value = false;
+                    }, 1500); // 1.5초 애니메이션 지속시간 후 닫힘
+                };
+
+                // 오늘 날짜 구하기
+                const getToday = () => {
+                    const today = new Date();
+                    const yyyy = today.getFullYear();
+                    const mm = String(today.getMonth() + 1).padStart(2, '0');
+                    const dd = String(today.getDate()).padStart(2, '0');
+                    return `${yyyy}-${mm}-${dd}`;
+                };
+
+                // Data States
+                const basicInfo = reactive({
+                    공사명: '',
+                    시공사: '주식회사 예조종합건설',
+                    현장소장: '',
+                    작성기준일: getToday()
+                });
+                const riskData = ref([]);
+                
+                const searchGongjong = ref('');
+                const searchJob = ref('');
+                const searchUnitJob = ref('');
+                
+                // 원본 필터링 데이터 (기인물 토글 전 상태)
+                const filteredRawList = ref([]);
+                // 현재 선택된 기인물 다중 필터 (빈 배열이면 '전체'로 간주)
+                const selectedGiinmuls = ref([]);
+                
+                const table2Data = ref([]);
+
+                const gongjongList = computed(() => {
+                    const set = new Set(riskData.value.map(d => (d.공종명 || '').trim()).filter(Boolean));
+                    return Array.from(set).sort();
+                });
+
+                const jobList = computed(() => {
+                    if (!searchGongjong.value) return [];
+                    const set = new Set(
+                        riskData.value
+                            .filter(d => (d.공종명 || '').trim() === searchGongjong.value)
+                            .map(d => (d.작업명 || '').trim())
+                            .filter(Boolean)
+                    );
+                    return Array.from(set).sort();
+                });
+
+                const unitJobList = computed(() => {
+                    if (!searchGongjong.value || !searchJob.value) return [];
+                    const set = new Set(
+                        riskData.value
+                            .filter(d => (d.공종명 || '').trim() === searchGongjong.value && (d.작업명 || '').trim() === searchJob.value)
+                            .map(d => (d.단위작업명 || '').trim())
+                            .filter(Boolean)
+                    );
+                    return Array.from(set).sort();
+                });
+
+                // 필터 적용 후 존재하는 모든 고유 기인물 목록 추출
+                const availableGiinmuls = computed(() => {
+                    if (!filteredRawList.value.length) return [];
+                    const set = new Set(filteredRawList.value.map(item => (item.기인물 || '').trim()).filter(Boolean));
+                    return Array.from(set).sort();
+                });
+
+                // 기인물 다중 선택 토글 함수
+                const toggleGiinmul = (g) => {
+                    if (g === '전체') {
+                        selectedGiinmuls.value = [];
+                    } else {
+                        const index = selectedGiinmuls.value.indexOf(g);
+                        if (index > -1) {
+                            selectedGiinmuls.value.splice(index, 1); // 이미 선택되어 있으면 제거 (해제)
+                        } else {
+                            selectedGiinmuls.value.push(g); // 선택되지 않았으면 추가
+                        }
+                    }
+                };
+
+                // 현재 활성화된 기인물 탭에 맞춰 보여줄 데이터 (실시간 반영)
+                const table1Data = computed(() => {
+                    if (selectedGiinmuls.value.length === 0) {
+                        return filteredRawList.value;
+                    }
+                    return filteredRawList.value.filter(item => selectedGiinmuls.value.includes((item.기인물 || '').trim()));
+                });
+
+                // 날짜 포맷팅
+                const formatDateInput = (event) => {
+                    let val = event.target.value.replace(/[^0-9]/g, '');
+                    if (val.length > 4 && val.length <= 6) {
+                        val = val.substring(0, 4) + '-' + val.substring(4);
+                    } else if (val.length > 6) {
+                        val = val.substring(0, 4) + '-' + val.substring(4, 6) + '-' + val.substring(6, 8);
+                    }
+                    basicInfo.작성기준일 = val;
+                };
+
+                const loadRiskData = async () => {
+                    isLoading.value = true;
+                    loadingMsg.value = '위험요인 데이터베이스를 불러오는 중입니다...';
+                    try {
+                        const response = await fetch(URLS.riskDB);
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        const data = await response.json();
+                        riskData.value = data;
+                    } catch (error) {
+                        console.error('Fetch error:', error);
+                        showAlert('오류', '데이터베이스(JSON)를 불러오는데 실패했습니다.\n네트워크 상태를 확인해주세요.', 'error');
+                    } finally {
+                        isLoading.value = false;
+                    }
+                };
+
+                const applyFilter = () => {
+                    if (!searchGongjong.value) {
+                        showAlert('알림', '공종명을 선택해주세요.');
+                        return;
+                    }
+                    let filtered = riskData.value.filter(d => (d.공종명 || '').trim() === searchGongjong.value);
+                    if (searchJob.value) {
+                        filtered = filtered.filter(d => (d.작업명 || '').trim() === searchJob.value);
+                    }
+                    if (searchUnitJob.value) {
+                        filtered = filtered.filter(d => (d.단위작업명 || '').trim() === searchUnitJob.value);
+                    }
+                    
+                    // [공종명 + 기인물 + 재해유발요인] 기준 중복 제거 로직
+                    const seen = new Set();
+                    const uniqueFiltered = [];
+                    
+                    for (const item of filtered) {
+                        const key = `${(item.공종명 || '').trim()}_${(item.기인물 || '').trim()}_${(item.재해유발요인 || '').trim()}`;
+                        if (!seen.has(key)) {
+                            seen.add(key);
+                            uniqueFiltered.push({ ...item, _selected: false });
+                        }
+                    }
+
+                    // 중복 제거된 리스트를 원본 필터 리스트에 적용 및 체크박스 초기화
+                    filteredRawList.value = uniqueFiltered;
+                    // 기인물 토글 버튼 다중 선택 초기화 (전체로 리셋)
+                    selectedGiinmuls.value = [];
+                };
+
+                // 현재 보여지는 테이블(table1Data 또는 table2Data)에 한정하여 전체선택/해제 적용
+                const selectAll = (tableList, isSelected) => {
+                    tableList.forEach(item => item._selected = isSelected);
+                };
+
+                const moveSelected = () => {
+                    // 화면에 보이지 않는 탭의 체크 항목까지 포함하기 위해 filteredRawList 전체에서 추출
+                    const selectedItems = filteredRawList.value.filter(item => item._selected);
+                    
+                    if (selectedItems.length === 0) {
+                        showAlert('알림', '입력할 항목을 선택해주세요.');
+                        return;
+                    }
+                    
+                    const generateKey = (item) => `${item.공종명}_${item.기인물}_${item.재해유발요인}_${item['위험성 감소대책(예시)1']}`;
+                    const existingKeys = new Set(table2Data.value.map(generateKey));
+
+                    let addedCount = 0;
+                    selectedItems.forEach(item => {
+                        const key = generateKey(item);
+                        if (!existingKeys.has(key)) {
+                            table2Data.value.push({ ...item, _selected: false });
+                            existingKeys.add(key);
+                            addedCount++;
+                        }
+                    });
+
+                    // 이동 후 기존 리스트의 모든 체크 해제
+                    selectAll(filteredRawList.value, false);
+                    
+                    if (addedCount < selectedItems.length) {
+                        showAlert('알림', `${addedCount}건 추가되었습니다. (중복 제외)`);
+                    } else if (addedCount > 0) {
+                        triggerSuccessBanner(addedCount);
+                    }
+                };
+
+                const deleteChecked = async () => {
+                    const hasSelected = table2Data.value.some(item => item._selected);
+                    if (!hasSelected) {
+                        showAlert('알림', '삭제할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const confirmed = await showConfirm('삭제 확인', '체크된 목록을 삭제하시겠습니까?');
+                    if (confirmed) {
+                        table2Data.value = table2Data.value.filter(item => !item._selected);
+                    }
+                };
+
+                const clearAll = async () => {
+                    if (table2Data.value.length === 0) return;
+                    const confirmed = await showConfirm('전체 삭제', '정말로 모든 선택요인을 삭제하시겠습니까?');
+                    if (confirmed) {
+                        table2Data.value = [];
+                    }
+                };
+
+                const saveAllToJson = () => {
+                    const outputData = {
+                        basicInfo: basicInfo,
+                        selectedList: table2Data.value.map(item => {
+                            const { _selected, ...rest } = item;
+                            return rest;
+                        })
+                    };
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(outputData, null, 2));
+                    const downloadAnchorNode = document.createElement('a');
+                    downloadAnchorNode.setAttribute("href", dataStr);
+                    downloadAnchorNode.setAttribute("download", `위험성평가_저장데이터_${new Date().getTime()}.json`);
+                    document.body.appendChild(downloadAnchorNode); 
+                    downloadAnchorNode.click();
+                    downloadAnchorNode.remove();
+                };
+
+                const triggerFileLoad = () => fileInput.value.click();
+
+                const loadAllFromJson = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            if (data.basicInfo) Object.assign(basicInfo, data.basicInfo);
+                            if (data.selectedList) table2Data.value = data.selectedList.map(item => ({...item, _selected: false}));
+                            showAlert('성공', '데이터를 성공적으로 불러왔습니다.');
+                        } catch (error) {
+                            showAlert('오류', '파일 형식이 올바르지 않습니다.', 'error');
+                        }
+                        event.target.value = '';
+                    };
+                    reader.readAsText(file);
+                };
+
+                const dummyFirebaseLoad = async () => {};
+                const dummyFirebaseSave = async () => {};
+
+                // =========================================================
+                // ExcelJS 기반 엑셀 출력
+                // =========================================================
+                const exportExcel = async () => {
+                    if (table2Data.value.length === 0) {
+                        await showAlert('알림', '출력할 평가요인 데이터가 없습니다.');
+                        return;
+                    }
+
+                    isLoading.value = true;
+                    loadingMsg.value = '엑셀 템플릿 다운로드 및 문서 생성 중...';
+
+                    try {
+                        const templateUrl = evalType.value === '최초' ? URLS.firstTemplate : URLS.monthlyTemplate;
+                        const response = await fetch(templateUrl);
+                        if (!response.ok) throw new Error(`템플릿 다운로드 실패`);
+                        const arrayBuffer = await response.arrayBuffer();
+
+                        const workbook = new ExcelJS.Workbook();
+                        await workbook.xlsx.load(arrayBuffer);
+
+                        const wsInfo = workbook.worksheets.find(ws => ws.name.replace(/\s+/g, '') === '기본정보');
+                        if (wsInfo) {
+                            wsInfo.getCell('AA1').value = basicInfo.공사명 || "";
+                            wsInfo.getCell('AA2').value = basicInfo.시공사 || "";
+                            wsInfo.getCell('AA3').value = basicInfo.현장소장 || "";
+                            wsInfo.getCell('AA4').value = basicInfo.작성기준일 || "";
+                        }
+
+                        const wsOrigin = workbook.worksheets.find(ws => ws.name.replace(/\s+/g, '') === '공종별위험성평가');
+                        if (!wsOrigin) throw new Error('템플릿 내에 "공종별 위험성평가" 시트가 존재하지 않습니다.');
+
+                        const copySheet = (wb, srcWs, newName) => {
+                            const safeName = newName.replace(/[\\/*?:[\]]/g, '').substring(0, 31);
+                            const newWs = wb.addWorksheet(safeName);
+                            
+                            newWs.properties = JSON.parse(JSON.stringify(srcWs.properties || {}));
+                            newWs.pageSetup = JSON.parse(JSON.stringify(srcWs.pageSetup || {}));
+                            newWs.views = JSON.parse(JSON.stringify(srcWs.views || []));
+
+                            srcWs.columns.forEach((col, idx) => {
+                                const newCol = newWs.getColumn(idx + 1);
+                                newCol.width = col.width;
+                                newCol.hidden = col.hidden;
+                                if(col.style) {
+                                    try { newCol.style = JSON.parse(JSON.stringify(col.style)); } catch(e){}
+                                }
+                            });
+
+                            srcWs.eachRow({ includeEmpty: true }, (row, rowNum) => {
+                                const newRow = newWs.getRow(rowNum);
+                                newRow.height = row.height;
+                                newRow.hidden = row.hidden;
+                                
+                                row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+                                    const newCell = newRow.getCell(colNum);
+                                    newCell.value = cell.value;
+                                    try { newCell.style = JSON.parse(JSON.stringify(cell.style)); } catch(e){}
+                                });
+                            });
+
+                            if (srcWs.model && srcWs.model.merges) {
+                                srcWs.model.merges.forEach(m => newWs.mergeCells(m));
+                            } else if (srcWs._merges) {
+                                for(let range in srcWs._merges) {
+                                    newWs.mergeCells(range);
+                                }
+                            }
+                            return newWs;
+                        };
+
+                        const list2 = [...table2Data.value].sort((a, b) => (a.일련번호 || 0) - (b.일련번호 || 0));
+                        const gongjongSet = new Set(list2.map(item => (item.공종명 || "").trim()).filter(Boolean));
+
+                        for (let gongjong of gongjongSet) {
+                            const sheetName = `공종별(${gongjong})`;
+                            const wsNew = copySheet(workbook, wsOrigin, sheetName);
+                            
+                            wsNew.getCell('I5').value = gongjong;
+
+                            // 🚨 템플릿 복제 버그(테두리 유실) 픽스 구간
+                            for(let col = 31; col <= 43; col++) {
+                                const cell = wsNew.getCell(5, col);
+                                const currentBorder = cell.border || {};
+                                cell.border = {
+                                    ...currentBorder,
+                                    bottom: { style: 'thin' } 
+                                };
+                                if(col === 43) {
+                                    cell.border.right = { style: 'thin' };
+                                }
+                                if(col === 31) {
+                                    cell.border.left = { style: 'thin' }; 
+                                }
+                            }
+                            const i5Cell = wsNew.getCell('I5');
+                            i5Cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+
+                            const items = list2.filter(item => (item.공종명 || "").trim() === gongjong);
+                            let lastBaseRow = 0;
+
+                            items.forEach((item, idx) => {
+                                const baseRow = 11 + idx * 8;
+                                wsNew.getCell(`B${baseRow}`).value = item.작업명 || "";
+                                wsNew.getCell(`B${baseRow+4}`).value = item.단위작업명 || "";
+                                wsNew.getCell(`F${baseRow}`).value = item.기인물 || "";
+                                wsNew.getCell(`J${baseRow}`).value = item.재해유발요인 || "";
+                                wsNew.getCell(`Z${baseRow}`).value = item['위험성 감소대책(예시)1'] || "";
+                                wsNew.getCell(`Z${baseRow+1}`).value = item['위험성 감소대책(예시)2'] || "";
+                                wsNew.getCell(`Z${baseRow+2}`).value = item['위험성 감소대책(예시)3'] || "";
+                                wsNew.getCell(`Z${baseRow+3}`).value = item['위험성 감소대책(예시)4'] || "";
+                                wsNew.getCell(`Z${baseRow+4}`).value = item['위험성 감소대책(예시)5'] || "";
+                                wsNew.getCell(`Z${baseRow+5}`).value = item['위험성 감소대책(예시)6'] || "";
+                                wsNew.getCell(`V${baseRow}`).value = "상";
+                                
+                                lastBaseRow = baseRow;
+                            });
+
+                            if (lastBaseRow > 0) {
+                                wsNew.pageSetup.printTitlesRow = '6:10';
+                                const printEndRow = lastBaseRow + 7;
+                                wsNew.pageSetup.printArea = `B1:AQ${printEndRow}`;
+                            }
+                            wsNew.views = [{ state: 'normal', style: 'pageBreakPreview' }];
+                        }
+
+                        wsOrigin.state = 'hidden';
+
+                        const buffer = await workbook.xlsx.writeBuffer();
+                        const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                        
+                        const fileName = `[${evalType.value}]위험성평가_결과_${basicInfo.공사명 || '미상'}.xlsx`;
+                        
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(link.href);
+
+                        isLoading.value = false;
+                        await showAlert('엑셀 저장 완료', '데이터 입력이 정상적으로 반영되어 엑셀 파일이 저장되었습니다.');
+
+                    } catch (error) {
+                        console.error('Excel Export Error:', error);
+                        isLoading.value = false;
+                        await showAlert('출력 에러', `엑셀 생성 과정에서 문제가 발생했습니다.\n상세 사유: ${error.message}`, 'error');
+                    } finally {
+                        isLoading.value = false;
+                    }
+                };
+
+                onMounted(() => {
+                    loadRiskData();
+                });
+
+                return {
+                    evalType, showManual, showSuccessBanner, successBannerCount, basicInfo, gongjongList, jobList, unitJobList, searchGongjong, searchJob, searchUnitJob,
+                    table1Data, table2Data, isLoading, loadingMsg, fileInput, modal,
+                    filteredRawList, availableGiinmuls, selectedGiinmuls, toggleGiinmul,
+                    applyFilter, selectAll, moveSelected, deleteChecked, clearAll,
+                    saveAllToJson, loadAllFromJson, triggerFileLoad, exportExcel,
+                    dummyFirebaseLoad, dummyFirebaseSave, formatDateInput
+                };
+            }
+        });
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

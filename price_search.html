@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>단가 검색</title>
+    
+    <!-- Tailwind CSS (UI 디자인) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel (브라우저에서 JSX 컴파일) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- PapaParse (CSV 파일 초고속 파싱) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- Dexie.js (브라우저 내장 IndexedDB) -->
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+
+    <!-- Firebase SDK (유지) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-analytics.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBhY5W3WxnSscZjVaXE-dP8NEhmElSirnc",
+            authDomain: "labor-yejo-20260306.firebaseapp.com",
+            projectId: "labor-yejo-20260306",
+            storageBucket: "labor-yejo-20260306.firebasestorage.app",
+            messagingSenderId: "1063955788001",
+            appId: "1:1063955788001:web:401e863f4bce218c3787a0",
+            measurementId: "G-32WLRXQJJG"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        window.firebaseApp = app; 
+    </script>
+
+    <style>
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .table-container { max-height: calc(100vh - 240px); overflow: auto; }
+        
+        /* 텍스트 드래그 방지 (빠른 이동 시 불편함 해소) */
+        .no-select { user-select: none; }
+
+        /* 테이블 열 크기 조절 (Resizer) 스타일 */
+        th.resizable {
+            position: relative;
+        }
+        .resizer {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            cursor: col-resize;
+            z-index: 10;
+            transition: background-color 0.2s;
+        }
+        .resizer:hover, .resizer:active {
+            background-color: rgba(16, 185, 129, 0.6); /* emerald 색상 */
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // DB 설정
+        const db = new Dexie("PriceDataDB");
+        db.version(1).stores({
+            priceList: '++id, code, searchIndex' 
+        });
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('search');
+            const [isDbReady, setIsDbReady] = useState(false);
+            const [loadingMessage, setLoadingMessage] = useState('');
+            
+            // 검색 관련 상태
+            const [keyword, setKeyword] = useState('');
+            const [searchResults, setSearchResults] = useState([]);
+            const [selectedItem, setSelectedItem] = useState(null);
+            const [isSearching, setIsSearching] = useState(false);
+
+            // 열 너비(Width) 상태 관리
+            const [colWidths, setColWidths] = useState({
+                name: 300,
+                standard: 250,
+                unit: 80,
+                material: 120,
+                labor: 120,
+                expense: 120
+            });
+
+            const selectedRowRef = useRef(null);
+
+            // 열 너비 드래그 조절 핸들러
+            const handleResizeStart = (e, colKey) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const startX = e.clientX;
+                const startWidth = colWidths[colKey];
+
+                const onMouseMove = (moveEvent) => {
+                    requestAnimationFrame(() => {
+                        const newWidth = Math.max(50, startWidth + (moveEvent.clientX - startX));
+                        setColWidths(prev => ({ ...prev, [colKey]: newWidth }));
+                    });
+                };
+
+                const onMouseUp = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            };
+
+            // 숫자 포맷 (콤마)
+            const formatNumber = (val) => {
+                if (!val) return '0';
+                const num = Number(val.toString().replace(/,/g, ''));
+                if (isNaN(num)) return val;
+                return num.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+            };
+
+            // 초기 로드 시 DB 확인
+            useEffect(() => {
+                const init = async () => {
+                    const count = await db.priceList.count();
+                    if (count > 0) {
+                        setIsDbReady(true);
+                    } else {
+                        syncFromGithub(true);
+                    }
+                };
+                init();
+            }, []);
+
+            // 방향키 조작 로직
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (activeTab !== 'search' || searchResults.length === 0) return;
+                    if (document.activeElement.tagName.toLowerCase() === 'input') return;
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!selectedItem) {
+                            setSelectedItem(searchResults[0]);
+                        } else {
+                            const currentIndex = searchResults.findIndex(item => item.id === selectedItem.id);
+                            if (currentIndex >= 0 && currentIndex < searchResults.length - 1) {
+                                setSelectedItem(searchResults[currentIndex + 1]);
+                            }
+                        }
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (selectedItem) {
+                            const currentIndex = searchResults.findIndex(item => item.id === selectedItem.id);
+                            if (currentIndex > 0) {
+                                setSelectedItem(searchResults[currentIndex - 1]);
+                            }
+                        }
+                    }
+                };
+
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [activeTab, searchResults, selectedItem]);
+
+            // 선택된 항목 스크롤 추적
+            useEffect(() => {
+                if (selectedRowRef.current) {
+                    selectedRowRef.current.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest'
+                    });
+                }
+            }, [selectedItem]);
+
+            const checkDbStatus = async () => {
+                const count = await db.priceList.count();
+                if (count > 0) setIsDbReady(true);
+            };
+
+            // CSV Row 매핑
+            const processRowData = (row) => {
+                if (!row[0] || String(row[0]).includes('코드') || String(row[0]).includes('코  드')) return null;
+
+                return {
+                    code: String(row[0]).trim(),       
+                    name: row[1] || '',                
+                    standard: row[2] || '',            
+                    unit: row[3] || '',                
+                    material: row[4] || '0',           
+                    labor: row[5] || '0',              
+                    expense: row[6] || '0',            
+                    total: row[7] || '0',              
+                    searchIndex: row.join(' ').toLowerCase() 
+                };
+            };
+
+            // 깃허브 연동
+            const syncFromGithub = async (isAuto = false) => {
+                if (!isAuto && !confirm("GitHub에서 최신 단가 데이터를 가져와 갱신하시겠습니까?")) return;
+                
+                const GITHUB_BASE_URL = "https://hongstar2776-cmyk.github.io/My-Dashboard/"; 
+                const fileUrl = "price_data.csv";
+
+                setLoadingMessage(`단가 데이터 다운로드 및 최적화 중... (최초 1회 약 3~5초 소요)`);
+                
+                try {
+                    await new Promise((resolve, reject) => {
+                        Papa.parse(GITHUB_BASE_URL + fileUrl, {
+                            download: true, 
+                            header: false,
+                            skipEmptyLines: true,
+                            complete: async (results) => {
+                                try {
+                                    await db.priceList.clear();
+                                    const records = [];
+                                    
+                                    for (let row of results.data) {
+                                        const parsedData = processRowData(row);
+                                        if (parsedData) records.push(parsedData);
+                                    }
+                                    
+                                    await db.priceList.bulkAdd(records);
+                                    resolve();
+                                } catch (e) {
+                                    reject(e);
+                                }
+                            },
+                            error: (err) => reject(new Error(`다운로드 실패: ${err}`))
+                        });
+                    });
+
+                    setLoadingMessage('');
+                    if (!isAuto) alert("✅ 데이터 갱신이 완료되었습니다!");
+                    checkDbStatus();
+                    setActiveTab('search');
+
+                } catch (error) {
+                    console.error(error);
+                    if (!isAuto) alert(`❌ 데이터를 가져오지 못했습니다.\nGitHub 주소에 price_data.csv 파일이 있는지 확인해주세요.`);
+                    setLoadingMessage('');
+                }
+            };
+
+            // 수동 업로드
+            const handleFileUpload = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                setLoadingMessage(`${file.name} 데이터 파싱 및 고속 DB 구축 중...`);
+                
+                Papa.parse(file, {
+                    header: false,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        try {
+                            await db.priceList.clear();
+                            const records = [];
+                            
+                            for (let row of results.data) {
+                                const parsedData = processRowData(row);
+                                if (parsedData) records.push(parsedData);
+                            }
+
+                            await db.priceList.bulkAdd(records);
+                            setLoadingMessage('');
+                            alert(`✅ ${file.name} 저장 완료! (총 ${records.length.toLocaleString()}건)`);
+                            checkDbStatus();
+                            setActiveTab('search');
+                        } catch (error) {
+                            console.error(error);
+                            alert("저장 중 오류가 발생했습니다.");
+                            setLoadingMessage('');
+                        }
+                    }
+                });
+            };
+
+            // 검색 로직
+            const handleSearch = async (e) => {
+                e.preventDefault();
+                if (!keyword.trim() || !isDbReady) return;
+
+                setIsSearching(true);
+                setSelectedItem(null); 
+
+                try {
+                    const searchTerms = keyword.toLowerCase().split(' ').filter(k => k);
+                    const results = await db.priceList
+                        .filter(item => {
+                            return searchTerms.every(term => item.searchIndex.includes(term));
+                        })
+                        .limit(300) 
+                        .toArray();
+
+                    setSearchResults(results);
+                } catch (error) {
+                    console.error("검색 오류:", error);
+                } finally {
+                    setIsSearching(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* 네비게이션 */}
+                    <header className="bg-emerald-800 text-white p-4 shadow-md flex justify-between items-center">
+                        <h1 className="text-xl font-bold flex items-center gap-2">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            단가 검색
+                        </h1>
+                        <div className="flex gap-4 text-sm font-medium">
+                            <button 
+                                onClick={() => setActiveTab('search')}
+                                className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'search' ? 'bg-emerald-600 shadow-inner' : 'hover:bg-emerald-700'}`}
+                            >
+                                검색 화면
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('upload')}
+                                className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'upload' ? 'bg-emerald-600 shadow-inner' : 'hover:bg-emerald-700'}`}
+                            >
+                                데이터 설정
+                            </button>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 p-6 max-w-[1920px] w-full mx-auto">
+                        
+                        {/* 로딩 팝업 */}
+                        {loadingMessage && (
+                            <div className="fixed inset-0 bg-slate-900 bg-opacity-70 flex flex-col items-center justify-center z-50 text-white backdrop-blur-sm">
+                                <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-emerald-400 mb-6"></div>
+                                <p className="text-2xl font-bold tracking-tight">{loadingMessage}</p>
+                                <p className="text-slate-300 mt-3 bg-slate-800 px-4 py-2 rounded-lg text-sm">한 번 구축해두면 이후 검색은 0.1초 만에 처리됩니다.</p>
+                            </div>
+                        )}
+
+                        {/* 설정 탭 */}
+                        {activeTab === 'upload' && (
+                            <div className="max-w-4xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                                <h2 className="text-2xl font-bold mb-6 text-slate-800">단가 데이터 최적화 설정</h2>
+                                <p className="text-slate-600 mb-8 leading-relaxed">
+                                    수만 건의 엑셀 데이터를 브라우저 전용 데이터베이스(IndexedDB)에 변환하여 영구 보관합니다.<br/>
+                                    <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded text-sm font-bold mt-2 inline-block">엑셀 대비 100배 이상의 검색 속도를 보장합니다.</span>
+                                </p>
+
+                                <div className="mb-10 p-6 bg-slate-50 border border-slate-200 rounded-xl">
+                                    <h3 className="font-bold text-lg text-slate-800 mb-2">1. 원격 서버(GitHub)에서 가져오기</h3>
+                                    <p className="text-sm text-slate-500 mb-4">
+                                        GitHub에 올려둔 <code className="bg-slate-200 text-slate-800 px-1 py-0.5 rounded">price_data.csv</code> 파일을 불러와 검색 엔진을 최신화합니다.
+                                    </p>
+                                    <button 
+                                        onClick={() => syncFromGithub(false)}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-lg shadow transition-colors flex items-center gap-2"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                        최신 단가 데이터 동기화
+                                    </button>
+                                </div>
+
+                                <div className="p-6 border border-slate-200 rounded-xl">
+                                    <h3 className="font-bold text-lg mb-2 text-slate-800">2. 내 PC 파일 직접 업로드 (수동)</h3>
+                                    <p className="text-sm text-slate-500 mb-4">깃허브에 올리기 전 PC에 있는 CSV 파일을 바로 적용하여 테스트해볼 수 있습니다.</p>
+                                    <input 
+                                        type="file" 
+                                        accept=".csv" 
+                                        onChange={handleFileUpload} 
+                                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-dashed border-slate-300 p-4 rounded-xl bg-slate-50" 
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 검색 탭 */}
+                        {activeTab === 'search' && (
+                            <div className="flex flex-col h-full gap-5">
+                                {/* 상단 검색 박스 */}
+                                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center gap-4">
+                                    <form onSubmit={handleSearch} className="flex-1 flex gap-3 w-full">
+                                        <div className="relative flex-1">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                            </div>
+                                            <input 
+                                                type="text" 
+                                                value={keyword}
+                                                onChange={(e) => setKeyword(e.target.value)}
+                                                placeholder="품명, 규격 검색 (띄어쓰기로 다중 검색 가능, 예: 철근 10mm)" 
+                                                className="w-full pl-11 pr-4 py-3.5 border-2 border-emerald-100 bg-emerald-50/30 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-lg transition-colors placeholder:text-slate-400"
+                                                disabled={!isDbReady}
+                                            />
+                                        </div>
+                                        <button 
+                                            type="submit" 
+                                            disabled={!isDbReady || isSearching}
+                                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white px-8 py-3.5 rounded-lg font-bold text-lg transition-colors whitespace-nowrap shadow-sm"
+                                        >
+                                            {isSearching ? '검색중...' : '조회하기'}
+                                        </button>
+                                    </form>
+                                </div>
+
+                                {!isDbReady && activeTab === 'search' && (
+                                    <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-md">
+                                        <p className="text-amber-700 font-medium">단가 DB가 준비되지 않았습니다. 잠시만 기다려주세요...</p>
+                                    </div>
+                                )}
+
+                                {/* 테이블 영역 */}
+                                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col flex-1">
+                                    <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="font-bold text-slate-700">검색 결과</h3>
+                                            <span className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-md font-medium">
+                                                키보드 방향키(↑,↓)로 항목 이동, 열 제목 사이를 드래그하여 너비 조절
+                                            </span>
+                                        </div>
+                                        <span className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                                            {searchResults.length > 0 ? `${searchResults.length}건 검색됨` : '0건'}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="table-container flex-1 bg-white relative w-full">
+                                        <table className="w-full text-sm text-left whitespace-nowrap" style={{ tableLayout: 'fixed', minWidth: '900px' }}>
+                                            <thead className="text-slate-500 font-bold bg-slate-100 sticky top-0 shadow-sm z-10 border-b border-slate-200">
+                                                <tr>
+                                                    <th style={{ width: colWidths.name }} className="resizable px-5 py-3 border-r border-slate-200/50">
+                                                        품명
+                                                        <div className="resizer" onMouseDown={(e) => handleResizeStart(e, 'name')} title="드래그하여 너비 조절"></div>
+                                                    </th>
+                                                    <th style={{ width: colWidths.standard }} className="resizable px-5 py-3 border-r border-slate-200/50">
+                                                        규격
+                                                        <div className="resizer" onMouseDown={(e) => handleResizeStart(e, 'standard')} title="드래그하여 너비 조절"></div>
+                                                    </th>
+                                                    <th style={{ width: colWidths.unit }} className="resizable px-5 py-3 border-r border-slate-200/50 text-center">
+                                                        단위
+                                                        <div className="resizer" onMouseDown={(e) => handleResizeStart(e, 'unit')} title="드래그하여 너비 조절"></div>
+                                                    </th>
+                                                    <th style={{ width: colWidths.material }} className="resizable px-5 py-3 border-r border-slate-200/50 text-right">
+                                                        재료비
+                                                        <div className="resizer" onMouseDown={(e) => handleResizeStart(e, 'material')} title="드래그하여 너비 조절"></div>
+                                                    </th>
+                                                    <th style={{ width: colWidths.labor }} className="resizable px-5 py-3 border-r border-slate-200/50 text-right">
+                                                        노무비
+                                                        <div className="resizer" onMouseDown={(e) => handleResizeStart(e, 'labor')} title="드래그하여 너비 조절"></div>
+                                                    </th>
+                                                    <th style={{ width: colWidths.expense }} className="resizable px-5 py-3 border-r border-slate-200/50 text-right">
+                                                        경비
+                                                        <div className="resizer" onMouseDown={(e) => handleResizeStart(e, 'expense')} title="드래그하여 너비 조절"></div>
+                                                    </th>
+                                                    <th className="px-5 py-3 text-right text-emerald-800">
+                                                        합계
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="no-select">
+                                                {searchResults.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="7" className="px-4 py-20 text-center">
+                                                            <div className="flex flex-col items-center text-slate-400">
+                                                                <svg className="w-16 h-16 mb-4 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l4.879-4.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242z"></path></svg>
+                                                                <span className="text-lg">검색어를 입력하시면 빠르게 단가를 찾아드립니다.</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    searchResults.map((item, idx) => {
+                                                        const isSelected = selectedItem?.id === item.id;
+                                                        return (
+                                                            <tr 
+                                                                key={idx} 
+                                                                ref={isSelected ? selectedRowRef : null}
+                                                                onClick={() => setSelectedItem(item)}
+                                                                className={`border-b border-slate-100 cursor-pointer transition-colors ${isSelected ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}
+                                                            >
+                                                                <td className="px-5 py-3.5 font-bold text-slate-800 border-r border-slate-100 truncate" title={item.name}>
+                                                                    {item.name}
+                                                                </td>
+                                                                <td className="px-5 py-3.5 text-slate-600 border-r border-slate-100 truncate" title={item.standard}>
+                                                                    {item.standard}
+                                                                </td>
+                                                                <td className="px-5 py-3.5 text-center font-medium text-slate-500 border-r border-slate-100 truncate">
+                                                                    {item.unit}
+                                                                </td>
+                                                                <td className="px-5 py-3.5 text-right text-slate-600 font-mono border-r border-slate-100 truncate">
+                                                                    {formatNumber(item.material)}
+                                                                </td>
+                                                                <td className="px-5 py-3.5 text-right text-slate-600 font-mono border-r border-slate-100 truncate">
+                                                                    {formatNumber(item.labor)}
+                                                                </td>
+                                                                <td className="px-5 py-3.5 text-right text-slate-600 font-mono border-r border-slate-100 truncate">
+                                                                    {formatNumber(item.expense)}
+                                                                </td>
+                                                                <td className="px-5 py-3.5 text-right text-emerald-700 font-bold font-mono bg-emerald-50/30 truncate">
+                                                                    {formatNumber(item.total)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

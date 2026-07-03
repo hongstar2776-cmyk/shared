@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>예조종합건설 내역서 관리 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/handsontable@14.0/dist/handsontable.full.min.css" rel="stylesheet" media="screen">
+    <script src="https://cdn.jsdelivr.net/npm/handsontable@14.0/dist/handsontable.full.min.js"></script>
+    <style>
+        .hot-container { height: 100%; width: 100%; overflow: hidden; }
+        .htDimmed { background-color: #f3f4f6 !important; color: #374151 !important; font-weight: bold; }
+        .group-header { background-color: #bfdbfe !important; font-weight: bold; color: #1e3a8a !important; }
+        .group-subtotal { background-color: #fef08a !important; font-weight: bold; color: #854d0e !important; }
+        .group-blank { background-color: #f9fafb !important; border-bottom: 2px solid #9ca3af !important; }
+        .modal-enter { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .header-mapper { user-select: none; padding: 2px 0; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col font-sans overflow-hidden">
+
+    <header class="bg-blue-800 text-white p-4 shadow-md flex justify-between items-center z-10">
+        <div>
+            <h1 class="text-xl font-bold">내역서 관리 시스템</h1>
+            <p class="text-sm text-blue-200">공종번호 자동 정렬 및 엑셀 출력 기능 제공</p>
+        </div>
+        <div class="space-x-2">
+            <button onclick="openModal()" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded shadow transition text-sm font-semibold">
+                + 엑셀 데이터 붙여넣기
+            </button>
+            <button onclick="openExportModal()" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded shadow transition text-sm font-semibold">
+                엑셀로 출력하기
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 p-4 h-full w-full flex flex-col">
+        <div class="flex space-x-1 mb-2">
+            <button id="tab-btn-summary" onclick="switchTab('summary')" class="px-6 py-2 bg-gray-300 text-gray-600 rounded-t-lg font-bold hover:bg-gray-200 transition">
+                공종별합계표
+            </button>
+            <button id="tab-btn-main" onclick="switchTab('main')" class="px-6 py-2 bg-white text-blue-800 rounded-t-lg font-bold shadow-[0_-2px_5px_rgba(0,0,0,0.1)] transition z-10">
+                기본 내역서
+            </button>
+        </div>
+
+        <div class="bg-white rounded-b-lg rounded-tr-lg shadow border border-gray-300 flex flex-col flex-1 overflow-hidden">
+            <div id="view-summary" class="hidden flex-1 p-2 relative h-full w-full">
+                <div id="summary-view" class="hot-container"></div>
+            </div>
+
+            <div id="view-main" class="flex-1 flex flex-col relative h-full w-full">
+                <div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center">
+                    <span class="text-xs text-gray-600 font-bold flex items-center">
+                        <svg class="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        기본 내역서 작업 공간 (같은 공종번호 내에서만 행 드래그 가능)
+                    </span>
+                    <button onclick="openBatchModal()" class="px-4 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold rounded shadow transition flex items-center">
+                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        공종번호 일괄 변경
+                    </button>
+                </div>
+                <div class="flex-1 p-2 relative">
+                    <div id="left-view" class="hot-container"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="batch-change-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[1000] flex justify-center items-center modal-enter">
+        <div class="bg-white w-96 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-lg font-bold text-gray-800">공종번호 일괄 변경</h2>
+                <button onclick="closeBatchModal()" class="text-gray-500 hover:text-red-500 font-bold text-xl">&times;</button>
+            </div>
+            <div class="p-4 flex flex-col space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">변경할 기존 공종번호</label>
+                    <select id="batch-old-category" class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">새 공종번호 입력</label>
+                    <input type="text" id="batch-new-category" placeholder="새로운 공종번호를 입력하세요" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-2">
+                <button onclick="closeBatchModal()" class="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 bg-white transition">취소</button>
+                <button onclick="applyBatchChange()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold shadow transition">
+                    일괄 변경 적용
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="paste-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[1000] flex justify-center items-center modal-enter">
+        <div class="bg-white w-11/12 max-w-6xl h-5/6 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-lg font-bold text-gray-800">엑셀 데이터 붙여넣기 (Ctrl+V)</h2>
+                <button onclick="closeModal()" class="text-gray-500 hover:text-red-500 font-bold text-xl">&times;</button>
+            </div>
+            <div class="p-2 bg-yellow-50 text-sm text-yellow-800 border-b">
+                ※ 엑셀을 붙여넣고 곧바로 [기본 넘기기]를 누르면 자동 계산 및 정렬됩니다.
+            </div>
+            <div class="flex-1 p-4 relative">
+                <div id="modal-view" class="hot-container border border-gray-300"></div>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm font-bold text-gray-700">단가 일괄 증/감액:</span>
+                    <input type="number" id="increase-rate" placeholder="0" class="w-20 px-2 py-1 border border-gray-300 rounded text-right focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <span class="text-sm text-gray-700 font-bold">%</span>
+                    <button onclick="applyDataToLeftWithIncrease()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 font-semibold shadow transition">
+                        증액하여 넘기기
+                    </button>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="closeModal()" class="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 bg-white shadow-sm transition">취소</button>
+                    <button onclick="applyDataToLeft(0)" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold shadow transition">
+                        기본 넘기기
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="export-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[1000] flex justify-center items-center modal-enter">
+        <div class="bg-white w-96 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-lg font-bold text-gray-800">엑셀 템플릿으로 출력</h2>
+                <button onclick="closeExportModal()" class="text-gray-500 hover:text-red-500 font-bold text-xl">&times;</button>
+            </div>
+            <div class="p-4 flex flex-col space-y-4">
+                <p class="text-sm text-gray-600">서버에 등록된 기본 템플릿을 사용하여 데이터를 출력합니다.</p>
+                <p class="text-xs text-indigo-600 font-semibold">데이터는 A5 셀부터 자동으로 포맷에 맞추어 작성됩니다.</p>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-2">
+                <button onclick="closeExportModal()" class="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 bg-white transition">취소</button>
+                <button onclick="executeExport()" id="export-btn" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 font-semibold shadow transition flex items-center">
+                    출력하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const colHeaders = ['공종번호', '품명', '규격', '단위', '수량', '자재단가', '자재금액', '노무단가', '노무금액', '경비단가', '경비금액', '합계단가', '합계금액', '비고'];
+        
+        const columns = [
+            { data: 'category', type: 'text' },
+            { data: 'name', type: 'text' },
+            { data: 'spec', type: 'text' },
+            { data: 'unit', type: 'text' },
+            { data: 'qty', type: 'numeric', numericFormat: { pattern: '0,0.00' } },
+            { data: 'mat_up', type: 'numeric', numericFormat: { pattern: '0,0' } },
+            { data: 'mat_amt', type: 'numeric', numericFormat: { pattern: '0,0' } }, 
+            { data: 'lab_up', type: 'numeric', numericFormat: { pattern: '0,0' } },
+            { data: 'lab_amt', type: 'numeric', numericFormat: { pattern: '0,0' } },
+            { data: 'exp_up', type: 'numeric', numericFormat: { pattern: '0,0' } },
+            { data: 'exp_amt', type: 'numeric', numericFormat: { pattern: '0,0' } },
+            { data: 'tot_up', type: 'numeric', numericFormat: { pattern: '0,0' } },
+            { data: 'tot_amt', type: 'numeric', numericFormat: { pattern: '0,0' } },
+            { data: 'note', type: 'text' }
+        ];
+
+        function safeParseNum(val) {
+            if (val === null || val === undefined || val === '') return 0;
+            if (typeof val === 'string') return parseFloat(val.replace(/,/g, '')) || 0;
+            return parseFloat(val) || 0;
+        }
+
+        let isReorganizing = false;
+
+        function switchTab(tab) {
+            const btnSummary = document.getElementById('tab-btn-summary');
+            const btnMain = document.getElementById('tab-btn-main');
+            const viewSummary = document.getElementById('view-summary');
+            const viewMain = document.getElementById('view-main');
+
+            if (tab === 'summary') {
+                btnSummary.className = "px-6 py-2 bg-white text-blue-800 rounded-t-lg font-bold shadow-[0_-2px_5px_rgba(0,0,0,0.1)] transition z-10";
+                btnMain.className = "px-6 py-2 bg-gray-300 text-gray-600 rounded-t-lg font-bold hover:bg-gray-200 transition";
+                viewSummary.classList.remove('hidden');
+                viewMain.classList.add('hidden');
+                if(summaryHot) summaryHot.render();
+            } else {
+                btnMain.className = "px-6 py-2 bg-white text-blue-800 rounded-t-lg font-bold shadow-[0_-2px_5px_rgba(0,0,0,0.1)] transition z-10";
+                btnSummary.className = "px-6 py-2 bg-gray-300 text-gray-600 rounded-t-lg font-bold hover:bg-gray-200 transition";
+                viewMain.classList.remove('hidden');
+                viewSummary.classList.add('hidden');
+                if(leftHot) leftHot.render();
+            }
+        }
+
+        function reorganizeData() {
+            if (isReorganizing) return;
+            isReorganizing = true;
+            
+            const rowCount = leftHot.countRows();
+            const orderedData = [];
+            for(let i=0; i<rowCount; i++) {
+                const physicalRow = leftHot.toPhysicalRow(i);
+                const rowData = leftHot.getSourceDataAtRow(physicalRow);
+                if (rowData) orderedData.push(rowData);
+            }
+
+            const realData = orderedData.filter(r => r._type !== 'header' && r._type !== 'subtotal' && r._type !== 'blank' && (r.category || r.name));
+            realData.forEach(r => r._type = 'data'); 
+
+            const groups = {};
+            const uniqueCategories = new Set();
+            
+            realData.forEach(r => {
+                const cat = (r.category || '').trim() || '미지정'; 
+                uniqueCategories.add(cat);
+                if (!groups[cat]) {
+                    groups[cat] = [];
+                }
+                groups[cat].push(r);
+            });
+
+            const groupOrder = Array.from(uniqueCategories).sort();
+            const newData = [];
+            
+            groupOrder.forEach(cat => {
+                newData.push({ category: cat, name: cat, _type: 'header' });
+                
+                let matAmtTotal = 0, labAmtTotal = 0, expAmtTotal = 0, totAmtTotal = 0;
+
+                groups[cat].forEach(r => {
+                    newData.push(r);
+                    matAmtTotal += parseFloat(r.mat_amt) || 0;
+                    labAmtTotal += parseFloat(r.lab_amt) || 0;
+                    expAmtTotal += parseFloat(r.exp_amt) || 0;
+                    totAmtTotal += parseFloat(r.tot_amt) || 0;
+                });
+
+                newData.push({
+                    category: cat, name: `[${cat} 소계]`,
+                    mat_amt: matAmtTotal, lab_amt: labAmtTotal, exp_amt: expAmtTotal, tot_amt: totAmtTotal,
+                    _type: 'subtotal'
+                });
+
+                newData.push({ _type: 'blank' });
+            });
+
+            for(let i=0; i<15; i++) {
+                newData.push({ _type: 'data' });
+            }
+
+            leftHot.loadData(newData);
+            updateSummaryTable(); 
+            isReorganizing = false;
+        }
+
+        function openBatchModal() {
+            const rowCount = leftHot.countRows();
+            const uniqueCategories = new Set();
+            
+            for(let i=0; i<rowCount; i++) {
+                const physicalRow = leftHot.toPhysicalRow(i);
+                const r = leftHot.getSourceDataAtRow(physicalRow);
+                
+                if (r && r._type === 'data' && (r.category || r.name)) {
+                    const cat = (r.category || '').trim() || '미지정';
+                    uniqueCategories.add(cat);
+                }
+            }
+
+            const select = document.getElementById('batch-old-category');
+            select.innerHTML = '';
+            
+            const sortedCategories = Array.from(uniqueCategories).sort();
+            
+            if (sortedCategories.length === 0) {
+                alert("현재 내역서에 변경할 공종번호가 없습니다.");
+                return;
+            }
+
+            sortedCategories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                select.appendChild(opt);
+            });
+
+            document.getElementById('batch-new-category').value = '';
+            document.getElementById('batch-change-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('batch-new-category').focus(), 100);
+        }
+
+        function closeBatchModal() {
+            document.getElementById('batch-change-modal').classList.add('hidden');
+        }
+
+        function applyBatchChange() {
+            const oldCat = document.getElementById('batch-old-category').value;
+            const newCat = document.getElementById('batch-new-category').value.trim();
+
+            if (!newCat) {
+                alert("새로운 공종번호를 입력해주세요.");
+                return;
+            }
+            if (oldCat === newCat) {
+                alert("기존 공종번호와 동일합니다.");
+                return;
+            }
+
+            const rowCount = leftHot.countRows();
+            const updates = [];
+            
+            for(let i=0; i<rowCount; i++) {
+                const physicalRow = leftHot.toPhysicalRow(i);
+                const r = leftHot.getSourceDataAtRow(physicalRow);
+                
+                if (r && r._type === 'data' && (r.category || r.name)) {
+                    const currentCat = (r.category || '').trim() || '미지정';
+                    if (currentCat === oldCat) {
+                        updates.push([i, leftHot.propToCol('category'), newCat]);
+                    }
+                }
+            }
+
+            closeBatchModal();
+
+            if (updates.length > 0) {
+                leftHot.setDataAtCell(updates, 'batch-change');
+            }
+        }
+
+        function updateAllSubtotals() {
+            const data = leftHot.getSourceData();
+            const groups = {};
+            
+            data.forEach(r => {
+                if (r._type === 'data' && r.category) {
+                    if (!groups[r.category]) groups[r.category] = { mat: 0, lab: 0, exp: 0, tot: 0 };
+                    groups[r.category].mat += parseFloat(r.mat_amt) || 0;
+                    groups[r.category].lab += parseFloat(r.lab_amt) || 0;
+                    groups[r.category].exp += parseFloat(r.exp_amt) || 0;
+                    groups[r.category].tot += parseFloat(r.tot_amt) || 0;
+                }
+            });
+
+            const updates = [];
+            data.forEach((r, i) => {
+                if (r._type === 'subtotal' && r.category && groups[r.category]) {
+                    if (r.mat_amt !== groups[r.category].mat) updates.push([i, leftHot.propToCol('mat_amt'), groups[r.category].mat]);
+                    if (r.lab_amt !== groups[r.category].lab) updates.push([i, leftHot.propToCol('lab_amt'), groups[r.category].lab]);
+                    if (r.exp_amt !== groups[r.category].exp) updates.push([i, leftHot.propToCol('exp_amt'), groups[r.category].exp]);
+                    if (r.tot_amt !== groups[r.category].tot) updates.push([i, leftHot.propToCol('tot_amt'), groups[r.category].tot]);
+                }
+            });
+
+            if (updates.length > 0) {
+                leftHot.setDataAtCell(updates, 'calc-subtotal');
+            }
+            updateSummaryTable(); 
+        }
+
+        function updateSummaryTable() {
+            if(!summaryHot) return;
+            const data = leftHot.getSourceData();
+            const summaryData = data.filter(r => r._type === 'subtotal').map(r => ({
+                ...r,
+                name: `[${r.category} 소계]`
+            }));
+            summaryHot.loadData(summaryData);
+        }
+
+        function calculateRow(changes, source) {
+            if (source === 'calc' || source === 'calc-subtotal' || source === 'loadData' || !changes || isReorganizing) return;
+
+            const hot = this; 
+            let calcUpdates = [];
+            let needsReorg = false;
+
+            changes.forEach(([row, prop, oldValue, newValue]) => {
+                if (prop === 'category' && oldValue !== newValue) {
+                    needsReorg = true; 
+                }
+                
+                if (['qty', 'mat_up', 'lab_up', 'exp_up'].includes(prop)) {
+                    const physicalRow = hot.toPhysicalRow(row);
+                    const rowData = hot.getSourceDataAtRow(physicalRow);
+
+                    const qty = safeParseNum(rowData.qty);
+                    const matUP = safeParseNum(rowData.mat_up);
+                    const labUP = safeParseNum(rowData.lab_up);
+                    const expUP = safeParseNum(rowData.exp_up);
+
+                    const matAmt = Math.round(qty * matUP);
+                    const labAmt = Math.round(qty * labUP);
+                    const expAmt = Math.round(qty * expUP);
+                    
+                    const totUP = matUP + labUP + expUP;
+                    const totAmt = matAmt + labAmt + expAmt;
+
+                    calcUpdates.push([row, hot.propToCol('mat_amt'), matAmt]);
+                    calcUpdates.push([row, hot.propToCol('lab_amt'), labAmt]);
+                    calcUpdates.push([row, hot.propToCol('exp_amt'), expAmt]);
+                    calcUpdates.push([row, hot.propToCol('tot_up'), totUP]);
+                    calcUpdates.push([row, hot.propToCol('tot_amt'), totAmt]);
+                }
+            });
+
+            if (calcUpdates.length > 0) {
+                hot.setDataAtCell(calcUpdates, 'calc');
+            }
+
+            if (needsReorg) {
+                setTimeout(() => reorganizeData(), 50);
+            } else {
+                setTimeout(() => updateAllSubtotals(), 50);
+            }
+        }
+
+        let leftHot = new Handsontable(document.getElementById('left-view'), {
+            data: Array(20).fill().map(() => ({ _type: 'data' })), 
+            colHeaders: colHeaders,
+            columns: columns,
+            rowHeaders: true,
+            manualRowMove: true, 
+            contextMenu: ['row_above', 'row_below', 'remove_row', 'undo', 'redo', 'copy', 'cut'],
+            manualColumnResize: true,
+            licenseKey: 'non-commercial-and-evaluation',
+            afterChange: calculateRow,
+            
+            afterRemoveRow: function(index, amount, physicalRows, source) {
+                if(source !== 'loadData') {
+                    setTimeout(() => reorganizeData(), 50);
+                }
+            },
+            
+            afterRowMove: function(movedRows, finalIndex, dropIndex, movePossible, orderChanged) {
+                if (orderChanged) {
+                    setTimeout(() => reorganizeData(), 50);
+                }
+            },
+            cells: function(row, col, prop) {
+                var cellProperties = {};
+                var physicalRow = this.instance.toPhysicalRow(row);
+                var rowData = this.instance.getSourceDataAtRow(physicalRow);
+                
+                if (!rowData) return cellProperties;
+
+                if (rowData._type === 'header') {
+                    cellProperties.readOnly = true; 
+                    cellProperties.className = 'group-header';
+                } else if (rowData._type === 'subtotal') {
+                    cellProperties.readOnly = true;
+                    cellProperties.className = 'group-subtotal'; 
+                } else if (rowData._type === 'blank') {
+                    cellProperties.readOnly = true;
+                    cellProperties.className = 'group-blank';
+                } else {
+                    if (['mat_amt', 'lab_amt', 'exp_amt', 'tot_up', 'tot_amt'].includes(prop)) {
+                        cellProperties.readOnly = true;
+                        cellProperties.className = 'htDimmed';
+                    }
+                }
+                return cellProperties;
+            },
+            width: '100%',
+            height: '100%',
+            stretchH: 'all',
+        });
+
+        let summaryHot = new Handsontable(document.getElementById('summary-view'), {
+            data: [], 
+            colHeaders: colHeaders,
+            columns: columns,
+            rowHeaders: true,
+            readOnly: true, 
+            contextMenu: false,
+            manualColumnResize: true,
+            licenseKey: 'non-commercial-and-evaluation',
+            cells: function(row, col, prop) {
+                var cellProperties = {};
+                cellProperties.className = 'htDimmed group-subtotal'; 
+                return cellProperties;
+            },
+            width: '100%',
+            height: '100%',
+            stretchH: 'all',
+        });
+
+        const pasteOptions = [
+            {val: '', text: '(제외)'},
+            {val: 'category', text: '공종번호'}, 
+            {val: 'name', text: '품명'}, 
+            {val: 'spec', text: '규격'}, 
+            {val: 'unit', text: '단위'},
+            {val: 'qty', text: '수량'}, 
+            {val: 'mat_up', text: '자재단가'}, 
+            {val: 'lab_up', text: '노무단가'},
+            {val: 'exp_up', text: '경비단가'},
+            {val: 'note', text: '비고'}
+        ];
+
+        let columnMapping = ['category', 'name', 'spec', 'unit', 'qty', 'mat_up', '', 'lab_up', '', 'exp_up', '', '', '', ''];
+
+        window.updateMapping = function(colIndex, value) {
+            columnMapping[colIndex] = value;
+        };
+
+        let modalHot = new Handsontable(document.getElementById('modal-view'), {
+            data: Handsontable.helper.createEmptySpreadsheetData(50, 14),
+            rowHeaders: true,
+            colWidths: 100,
+            manualColumnResize: true,
+            licenseKey: 'non-commercial-and-evaluation',
+            colHeaders: function(col) {
+                let optionsHtml = pasteOptions.map(opt => 
+                    `<option value="${opt.val}" ${columnMapping[col] === opt.val ? 'selected' : ''}>${opt.text}</option>`
+                ).join('');
+                return `
+                    <div class="header-mapper" onmousedown="event.stopPropagation()">
+                        <select onchange="updateMapping(${col}, this.value)" class="text-xs border border-gray-300 p-1 rounded w-full cursor-pointer text-gray-700 bg-white">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                `;
+            }
+        });
+
+        setTimeout(() => {
+            reorganizeData();
+        }, 100);
+
+        function openModal() {
+            document.getElementById('paste-modal').classList.remove('hidden');
+            modalHot.render();
+        }
+        function closeModal() {
+            document.getElementById('paste-modal').classList.add('hidden');
+        }
+
+        function applyDataToLeft(increaseRate = 0) {
+            const sourceData = modalHot.getSourceData();
+            const mappedData = [];
+            const multiplier = 1 + (increaseRate / 100);
+
+            sourceData.forEach(row => {
+                if (row.every(cell => cell === null || cell === '')) return;
+
+                let newRowObj = { _type: 'data' };
+                
+                columnMapping.forEach((targetProp, sourceCol) => {
+                    if (targetProp !== '') {
+                        let val = row[sourceCol];
+                        if (['qty', 'mat_up', 'mat_amt', 'lab_up', 'lab_amt', 'exp_up', 'exp_amt', 'tot_up', 'tot_amt'].includes(targetProp)) {
+                            val = safeParseNum(val);
+                        }
+                        newRowObj[targetProp] = val;
+                    }
+                });
+
+                if (newRowObj.category || newRowObj.name) {
+                    const qty = safeParseNum(newRowObj.qty);
+                    let matUP = safeParseNum(newRowObj.mat_up);
+                    let labUP = safeParseNum(newRowObj.lab_up);
+                    let expUP = safeParseNum(newRowObj.exp_up);
+
+                    if (increaseRate !== 0) {
+                        matUP = Math.floor(matUP * multiplier);
+                        labUP = Math.floor(labUP * multiplier);
+                        expUP = Math.floor(expUP * multiplier);
+                        
+                        newRowObj.mat_up = matUP;
+                        newRowObj.lab_up = labUP;
+                        newRowObj.exp_up = expUP;
+                    }
+
+                    newRowObj.mat_amt = Math.round(qty * matUP);
+                    newRowObj.lab_amt = Math.round(qty * labUP);
+                    newRowObj.exp_amt = Math.round(qty * expUP);
+                    newRowObj.tot_up = matUP + labUP + expUP;
+                    newRowObj.tot_amt = newRowObj.mat_amt + newRowObj.lab_amt + newRowObj.exp_amt;
+
+                    mappedData.push(newRowObj);
+                }
+            });
+
+            if (mappedData.length > 0) {
+                const currentData = leftHot.getSourceData().filter(r => r._type !== 'header' && r._type !== 'subtotal' && r._type !== 'blank' && (r.category || r.name));
+                leftHot.loadData([...currentData, ...mappedData]);
+                reorganizeData();
+            }
+
+            modalHot.loadData(Handsontable.helper.createEmptySpreadsheetData(50, 14));
+            document.getElementById('increase-rate').value = '';
+            closeModal();
+        }
+
+        function applyDataToLeftWithIncrease() {
+            const rateInput = document.getElementById('increase-rate').value;
+            const rate = parseFloat(rateInput) || 0;
+            
+            if (rate === 0) {
+                if (!confirm("입력된 비율이 0%입니다. 금액 변경 없이 이대로 넘기시겠습니까?")) return;
+            }
+            applyDataToLeft(rate);
+        }
+
+        function openExportModal() {
+            document.getElementById('export-modal').classList.remove('hidden');
+        }
+        function closeExportModal() {
+            document.getElementById('export-modal').classList.add('hidden');
+        }
+
+        async function executeExport() {
+            const data = leftHot.getSourceData().filter(r => r._type === 'data' && (r.category || r.name));
+            if (data.length === 0) {
+                alert("출력할 내역서 데이터가 없습니다.");
+                return;
+            }
+
+            const exportBtn = document.getElementById('export-btn');
+            const originalBtnText = exportBtn.innerHTML;
+            exportBtn.innerHTML = "처리중...";
+            exportBtn.disabled = true;
+
+            try {
+                // GitHub에서 엑셀 템플릿 파일 다운로드
+                const templateURL = "https://hongstar2776-cmyk.github.io/My-Dashboard/resource/template_estmate.xlsx";
+                const response = await fetch(templateURL);
+                if (!response.ok) throw new Error("템플릿 파일을 불러올 수 없습니다.");
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(arrayBuffer);
+                const worksheet = workbook.worksheets[0];
+
+                const originalPageSetup = Object.assign({}, worksheet.pageSetup);
+                const originalMargins = Object.assign({}, worksheet.pageSetup.margins);
+
+                workbook.calcProperties.fullCalcOnLoad = true;
+
+                const groups = {};
+                data.forEach(r => {
+                    const cate = r.category || '미지정';
+                    if (!groups[cate]) groups[cate] = [];
+                    groups[cate].push(r);
+                });
+
+                let currentRow = 5;
+
+                for (const [cate, rows] of Object.entries(groups)) {
+                    let itemsToPrint = [
+                        { _type: 'header', category: cate, name: cate },
+                        ...rows
+                    ];
+
+                    while (itemsToPrint.length > 0) {
+                        let currentPageData = [];
+                        let startDataRow = currentRow;
+
+                        if (itemsToPrint.length <= 20) {
+                            currentPageData = itemsToPrint.splice(0, itemsToPrint.length);
+                            currentPageData.forEach(r => {
+                                writeExcelRowData(worksheet, currentRow, r);
+                                currentRow++;
+                            });
+                            
+                            while (currentRow < startDataRow + 20) {
+                                currentRow++;
+                            }
+                            currentRow++; 
+                            writeExcelSubtotal(worksheet, currentRow, startDataRow, startDataRow + 19, cate);
+                            currentRow++; 
+                            currentRow++; 
+
+                        } else if (itemsToPrint.length === 21) {
+                            currentPageData = itemsToPrint.splice(0, 21);
+                            currentPageData.forEach(r => {
+                                writeExcelRowData(worksheet, currentRow, r);
+                                currentRow++;
+                            });
+                            writeExcelSubtotal(worksheet, currentRow, startDataRow, startDataRow + 20, cate);
+                            currentRow++;
+                            currentRow++;
+
+                        } else {
+                            currentPageData = itemsToPrint.splice(0, 21);
+                            currentPageData.forEach(r => {
+                                writeExcelRowData(worksheet, currentRow, r);
+                                currentRow++;
+                            });
+                            worksheet.getCell('B' + currentRow).value = "[...다음 장으로 이어짐]";
+                            currentRow++;
+                            worksheet.getCell('B' + currentRow).value = "[...다음 장으로 이어짐]";
+                            currentRow++;
+                        }
+                    }
+                }
+
+                worksheet.pageSetup = originalPageSetup;
+                worksheet.pageSetup.margins = originalMargins;
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                saveAs(new Blob([buffer]), "내역서_출력_수식포함.xlsx");
+                
+                alert("엑셀 파일이 성공적으로 생성되었습니다!");
+                closeExportModal();
+
+            } catch (error) {
+                console.error("Excel Export Error:", error);
+                alert("엑셀 출력 중 오류가 발생했습니다.\n(에러: " + error.message + ")");
+            } finally {
+                exportBtn.innerHTML = originalBtnText;
+                exportBtn.disabled = false;
+            }
+        }
+
+        function writeExcelRowData(ws, rowIdx, data) {
+            ws.getCell('A' + rowIdx).value = data.category || '';
+            ws.getCell('B' + rowIdx).value = data.name || '';
+            ws.getCell('C' + rowIdx).value = data.spec || '';
+            ws.getCell('D' + rowIdx).value = data.unit || '';
+            
+            if (data._type === 'header') {
+                ws.getRow(rowIdx).font = { bold: true };
+                return;
+            }
+
+            ws.getCell('E' + rowIdx).value = safeParseNum(data.qty);
+            ws.getCell('F' + rowIdx).value = safeParseNum(data.mat_up);
+            ws.getCell('G' + rowIdx).value = { formula: `E${rowIdx}*F${rowIdx}` };
+            ws.getCell('H' + rowIdx).value = safeParseNum(data.lab_up);
+            ws.getCell('I' + rowIdx).value = { formula: `E${rowIdx}*H${rowIdx}` };
+            ws.getCell('J' + rowIdx).value = safeParseNum(data.exp_up);
+            ws.getCell('K' + rowIdx).value = { formula: `E${rowIdx}*J${rowIdx}` };
+            ws.getCell('L' + rowIdx).value = { formula: `F${rowIdx}+H${rowIdx}+J${rowIdx}` };
+            ws.getCell('M' + rowIdx).value = { formula: `G${rowIdx}+I${rowIdx}+K${rowIdx}` };
+            ws.getCell('N' + rowIdx).value = data.note || '';
+        }
+
+        function writeExcelSubtotal(ws, rowIdx, startRow, endRow, category) {
+            ws.getCell('A' + rowIdx).value = category;
+            ws.getCell('B' + rowIdx).value = `[${category} 소계]`;
+            
+            ws.getCell('G' + rowIdx).value = { formula: `SUM(G${startRow}:G${endRow})` };
+            ws.getCell('I' + rowIdx).value = { formula: `SUM(I${startRow}:I${endRow})` };
+            ws.getCell('K' + rowIdx).value = { formula: `SUM(K${startRow}:K${endRow})` };
+            ws.getCell('M' + rowIdx).value = { formula: `SUM(M${startRow}:M${endRow})` };
+            
+            ws.getRow(rowIdx).font = { bold: true };
+        }
+
+    </script>
+</body>
+</html>

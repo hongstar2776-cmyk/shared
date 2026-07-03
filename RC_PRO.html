@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RC 산출 PRO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Pretendard', sans-serif; background-color: #f1f5f9; }
+        .input-group { margin-bottom: 0.6rem; }
+        .input-label { display: block; font-size: 0.75rem; font-weight: 700; color: #475569; margin-bottom: 0.2rem; }
+        .input-field { width: 100%; padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; background-color: white; transition: all 0.2s; }
+        .input-field:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+        .section-hidden { display: none !important; }
+        .grid-compact { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+        .grid-span-2 { grid-column: span 2; }
+        .divider { border-top: 1px dashed #cbd5e1; margin: 0.75rem 0; }
+        .sub-header { font-size: 0.85rem; font-weight: 800; color: #1e293b; margin-bottom: 0.5rem; border-left: 3px solid #3b82f6; padding-left: 0.5rem; }
+        .panel-box { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 0.5rem; }
+        .modal-overlay { background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
+        
+        .tab-btn { padding: 0.75rem 1.5rem; font-weight: 700; font-size: 0.95rem; border-bottom: 3px solid transparent; color: #64748b; transition: all 0.2s; }
+        .tab-btn.active { border-bottom-color: #2563eb; color: #1e40af; background-color: #eff6ff; border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; }
+
+        .badge-override { background-color: #fef08a; color: #854d0e; border: 1px solid #fde047; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.65rem; font-weight: 800; margin-left: 0.25rem; }
+        .badge-exclude { background-color: #fecaca; color: #991b1b; border: 1px solid #fca5a5; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.65rem; font-weight: 800; margin-left: 0.25rem; text-decoration: line-through; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-slate-800 p-2 md:p-4 h-screen flex flex-col box-border overflow-hidden">
+
+    <div class="max-w-[1500px] mx-auto w-full h-full flex flex-col gap-3">
+        
+        <header class="bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between shrink-0 gap-3">
+            <div>
+                <h1 class="text-xl md:text-2xl font-black text-slate-900 tracking-tight">RC 산출 PRO</h1>
+                <p class="text-xs md:text-sm text-slate-500 mt-1">전문 적산 워크플로우 (일람표 마스터 등록 ➔ 위치별 치수/수량 산출)</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="exportJSON()" class="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded border border-slate-300 transition shadow-sm">JSON 내보내기</button>
+                <button onclick="document.getElementById('json-import').click()" class="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded border border-slate-300 transition shadow-sm">JSON 불러오기</button>
+                <input type="file" id="json-import" accept=".json" class="hidden" onchange="importJSON(event)">
+                <button onclick="exportExcel()" class="text-xs font-bold bg-green-50 hover:bg-green-100 text-green-700 px-3 py-1.5 rounded border border-green-300 transition shadow-sm">Excel(CSV) 다운로드</button>
+            </div>
+        </header>
+
+        <!-- 탭 네비게이션 -->
+        <div class="flex border-b border-slate-300 shrink-0 px-2">
+            <button onclick="switchTab('schedule')" id="tab-schedule" class="tab-btn active">1. 부재 일람표 (Schedule) 등록</button>
+            <button onclick="switchTab('takeoff')" id="tab-takeoff" class="tab-btn">2. 물량 산출 (Take-off)</button>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- VIEW 1: 일람표 등록 (Schedule Master Data) -->
+        <!-- ======================================================= -->
+        <div id="view-schedule" class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden pb-4">
+            <!-- 일람표 폼 -->
+            <div class="w-full lg:w-[480px] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col shrink-0 overflow-hidden">
+                <div class="p-3 bg-slate-50 border-b border-slate-200 shrink-0">
+                    <h2 class="text-md font-bold text-slate-800">새 부재 일람 제원 입력</h2>
+                </div>
+                <div class="p-4 overflow-y-auto flex-grow bg-white">
+                    <div class="grid-compact mb-2">
+                        <div class="input-group">
+                            <label class="input-label text-blue-700">부재 카테고리</label>
+                            <select id="sch_cat" class="input-field bg-blue-50/50 border-blue-200 font-bold" onchange="updateSchUI()">
+                                <option value="foundation">기초 (Foundation)</option>
+                                <option value="column">기둥 (Column)</option>
+                                <option value="beam">보 (Beam)</option>
+                                <option value="slab">슬래브 (Slab)</option>
+                                <option value="wall">벽체 (Wall)</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label text-blue-700">부재 명칭 (Mark)</label>
+                            <input type="text" id="sch_mark" class="input-field border-blue-200 font-bold" placeholder="예: F1, C1, B1, W1">
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <!-- 일람: 기초 -->
+                    <div id="sch_fnd_wrap" class="sch-section">
+                        <div class="grid-compact">
+                            <div class="input-group"><label class="input-label">기초 유형</label>
+                                <select id="sch_fnd_type" class="input-field" onchange="toggleFndType()">
+                                    <option value="isolated">독립기초 (수직근+띠장)</option>
+                                    <option value="mat">매트기초 (간격기준)</option>
+                                    <option value="strip">줄기초 (간격기준)</option>
+                                </select>
+                            </div>
+                            <div id="sch_fnd_layer_wrap" class="input-group"><label class="input-label text-indigo-700">배근 층수 (단/복배근)</label>
+                                <select id="sch_fnd_layer" class="input-field bg-indigo-50"><option value="single">단배근 (하부 1단)</option><option value="double">복배근 (상/하 2단 적용)</option></select>
+                            </div>
+                        </div>
+                        
+                        <!-- 독립기초 배근 -->
+                        <div id="sch_fnd_iso_panel" class="panel-box mt-2">
+                            <div class="sub-header">독립기초 평면 제원 (W, L)</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">가로 폭 (W, mm)</label><input type="number" id="sch_fnd_iso_w" class="input-field" step="10" placeholder="1000"></div>
+                                <div class="input-group"><label class="input-label">세로 길이 (L, mm)</label><input type="number" id="sch_fnd_iso_l" class="input-field" step="10" placeholder="1000"></div>
+                            </div>
+                            <div class="sub-header mt-2 text-blue-700">수직근 제원</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">수직근 규격</label><select id="sch_fnd_iso_v_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">수직근 개수(EA)</label><input type="number" id="sch_fnd_iso_v_qty" class="input-field" value="8"></div>
+                            </div>
+                            <div class="sub-header mt-2 text-purple-700">띠장 (BOTH / CENTER) 상세</div>
+                            <div class="grid-compact gap-y-2">
+                                <div class="input-group"><label class="input-label text-purple-700">띠장 BOTH 규격</label><select id="sch_fnd_iso_tie_both_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label text-purple-700">띠장 BOTH 간격</label><input type="number" id="sch_fnd_iso_tie_both_sp" class="input-field" value="100"></div>
+                                <div class="input-group"><label class="input-label text-emerald-700">띠장 CENTER 규격</label><select id="sch_fnd_iso_tie_center_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label text-emerald-700">띠장 CENTER 간격</label><input type="number" id="sch_fnd_iso_tie_center_sp" class="input-field" value="200"></div>
+                            </div>
+                        </div>
+
+                        <!-- 매트/줄기초 배근 -->
+                        <div id="sch_fnd_mat_panel" class="panel-box mt-2 section-hidden">
+                            <div class="sub-header">주근/부근 (간격 기준)</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">X방향(주근) 규격</label><select id="sch_fnd_x_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">X방향 간격(mm)</label><input type="number" id="sch_fnd_x_sp" class="input-field" step="10" value="200"></div>
+                                <div id="sch_fnd_y_sz_wrap" class="input-group"><label class="input-label">Y방향(부근) 규격</label><select id="sch_fnd_y_sz" class="input-field rebar-opts"></select></div>
+                                <div id="sch_fnd_y_sp_wrap" class="input-group"><label class="input-label">Y방향 간격(mm)</label><input type="number" id="sch_fnd_y_sp" class="input-field" step="10" value="200"></div>
+                            </div>
+                            <div class="sub-header text-purple-700 mt-2" id="sch_fnd_tie_label">측면 띠장/배력근 기준</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">띠장 규격</label><select id="sch_fnd_tie_sz" class="input-field"><option value="none">없음</option><option value="HD10">HD10</option><option value="HD13">HD13</option><option value="HD16">HD16</option></select></div>
+                                <div class="input-group"><label class="input-label">띠장 간격 (mm)</label><input type="number" id="sch_fnd_tie_sp" class="input-field" step="10" value="300"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 일람: 기둥 -->
+                    <div id="sch_col_wrap" class="sch-section section-hidden">
+                        <div class="input-group"><label class="input-label">기둥 단면 형태</label>
+                            <select id="sch_col_type" class="input-field"><option value="square">사각형 (Square)</option><option value="round">원형 (Round)</option></select>
+                        </div>
+                        <div class="panel-box">
+                            <div class="sub-header">주근 제원</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">주근 규격</label><select id="sch_col_main_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">주근 총 개수 (EA)</label><input type="number" id="sch_col_main_qty" class="input-field" step="1" value="8"></div>
+                            </div>
+                        </div>
+                        <div class="panel-box mt-2">
+                            <div class="sub-header text-purple-700">띠철근 (구간별 상세)</div>
+                            <div class="grid-compact">
+                                <div class="input-group grid-span-2"><label class="input-label">띠철근 규격</label><select id="sch_col_tie_sz" class="input-field"><option value="none">없음</option><option value="HD10">HD10</option><option value="HD13">HD13</option><option value="HD16">HD16</option></select></div>
+                                <div class="input-group"><label class="input-label">단부(주두/주각) 간격(mm)</label><input type="number" id="sch_col_tie_end_sp" class="input-field" step="10" value="100"></div>
+                                <div class="input-group"><label class="input-label">중앙부 간격(mm)</label><input type="number" id="sch_col_tie_mid_sp" class="input-field" step="10" value="200"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 일람: 보 -->
+                    <div id="sch_bm_wrap" class="sch-section section-hidden">
+                        <div class="grid-compact mb-2">
+                            <div class="input-group"><label class="input-label text-blue-700">보 폭 (W, mm)</label><input type="number" id="sch_bm_w" class="input-field border-blue-200" step="10"></div>
+                            <div class="input-group"><label class="input-label text-blue-700">보 춤 (H, mm)</label><input type="number" id="sch_bm_h" class="input-field border-blue-200" step="10"></div>
+                        </div>
+                        <div class="input-group"><label class="input-label">배근 유형 (구간 분리 여부)</label>
+                            <select id="sch_bm_type" class="input-field" onchange="toggleBmType()"><option value="continuous">구간 구분형 (내중외단 등)</option><option value="simple">전구간 동일형 (단순보)</option></select>
+                        </div>
+                        
+                        <div class="panel-box border-indigo-200">
+                            <div class="sub-header text-indigo-700">단부 / 공통 상하부근</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">상부근 규격</label><select id="sch_bm_top_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">상부근 개수(EA)</label><input type="number" id="sch_bm_top_qty" class="input-field" value="0"></div>
+                                <div class="input-group"><label class="input-label">하부근 규격</label><select id="sch_bm_bot_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">하부근 개수(EA)</label><input type="number" id="sch_bm_bot_qty" class="input-field" value="0"></div>
+                            </div>
+                        </div>
+
+                        <div id="sch_bm_mid_panel" class="panel-box border-emerald-200 mt-2">
+                            <div class="sub-header text-emerald-700">중앙부 상하부근 (구분형 선택시)</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">중앙 상부근 규격</label><select id="sch_bm_m_top_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">상부 개수(EA)</label><input type="number" id="sch_bm_m_top_qty" class="input-field" value="0"></div>
+                                <div class="input-group"><label class="input-label">중앙 하부근 규격</label><select id="sch_bm_m_bot_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">하부 개수(EA)</label><input type="number" id="sch_bm_m_bot_qty" class="input-field" value="0"></div>
+                            </div>
+                        </div>
+
+                        <div class="panel-box mt-2">
+                            <div class="sub-header text-purple-700">늑근 (Stirrup) 및 보조근</div>
+                            <div class="grid-compact">
+                                <div class="input-group grid-span-2"><label class="input-label">늑근 규격</label><select id="sch_bm_str_sz" class="input-field"><option value="none">없음</option><option value="HD10">HD10</option><option value="HD13">HD13</option></select></div>
+                                <div class="input-group" id="sch_bm_str_end_sp_wrap"><label class="input-label" id="lbl_bm_str_end_sp">단부 간격(mm)</label><input type="number" id="sch_bm_str_end_sp" class="input-field" value="150"></div>
+                                <div class="input-group" id="sch_bm_str_mid_sp_wrap"><label class="input-label">중앙 간격(mm)</label><input type="number" id="sch_bm_str_mid_sp" class="input-field" value="250"></div>
+                                
+                                <div class="input-group"><label class="input-label text-slate-600">표피/보조근 규격</label><select id="sch_bm_side_sz" class="input-field"><option value="none">없음</option><option value="HD10">HD10</option><option value="HD13">HD13</option><option value="HD16">HD16</option></select></div>
+                                <div class="input-group"><label class="input-label text-slate-600">총 개수(EA)</label><input type="number" id="sch_bm_side_qty" class="input-field" value="0"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 일람: 슬래브 -->
+                    <div id="sch_slb_wrap" class="sch-section section-hidden">
+                        <div class="input-group"><label class="input-label">배근 방식</label>
+                            <select id="sch_slb_type" class="input-field bg-indigo-50"><option value="single">단배근</option><option value="double">복배근</option></select>
+                        </div>
+                        <div class="panel-box">
+                            <div class="sub-header">주/부근 배근 간격</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">주근 규격</label><select id="sch_slb_main_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">주근 간격 (mm)</label><input type="number" id="sch_slb_main_sp" class="input-field" value="200"></div>
+                                <div class="input-group"><label class="input-label">부근 규격</label><select id="sch_slb_sub_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">부근 간격 (mm)</label><input type="number" id="sch_slb_sub_sp" class="input-field" value="200"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 일람: 벽체 (Wall) -->
+                    <div id="sch_wall_wrap" class="sch-section section-hidden">
+                        <div class="grid-compact">
+                            <div class="input-group"><label class="input-label">배근 방식</label>
+                                <select id="sch_wall_type" class="input-field bg-indigo-50"><option value="single">단배근</option><option value="double">복배근</option></select>
+                            </div>
+                            <div class="input-group"><label class="input-label">벽체 두께 (T, mm)</label><input type="number" id="sch_wall_t" class="input-field" step="10" value="200"></div>
+                        </div>
+                        <div class="panel-box">
+                            <div class="sub-header">수직/수평근 배근 간격</div>
+                            <div class="grid-compact">
+                                <div class="input-group"><label class="input-label">수직근(V) 규격</label><select id="sch_wall_v_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">수직근 간격 (mm)</label><input type="number" id="sch_wall_v_sp" class="input-field" value="200"></div>
+                                <div class="input-group"><label class="input-label">수평근(H) 규격</label><select id="sch_wall_h_sz" class="input-field rebar-opts"></select></div>
+                                <div class="input-group"><label class="input-label">수평근 간격 (mm)</label><input type="number" id="sch_wall_h_sp" class="input-field" value="200"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="p-3 bg-slate-50 border-t border-slate-200 shrink-0">
+                    <button id="btn-sch-submit" onclick="registerSchedule()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md">
+                        일람표 마스터에 등록
+                    </button>
+                </div>
+            </div>
+
+            <!-- 일람표 리스트 -->
+            <div class="w-full bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden h-full">
+                <div class="p-3 border-b border-slate-100 shrink-0 flex justify-between items-center bg-slate-50">
+                    <h2 class="text-sm font-bold text-slate-800">등록된 부재 일람표 (Master Data)</h2>
+                </div>
+                <div class="overflow-auto flex-grow bg-white p-4">
+                    <div id="schedule-list-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div class="col-span-full py-12 text-center text-slate-400 text-sm">등록된 부재 일람이 없습니다. 좌측 폼에서 등록해주세요.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- VIEW 2: 물량 산출 (Take-off) -->
+        <!-- ======================================================= -->
+        <div id="view-takeoff" class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden pb-4 section-hidden">
+            
+            <!-- 산출 폼 영역 (사이드바 - 모달 전환용 컨테이너 포함) -->
+            <div id="tk-sidebar-container" class="w-full lg:w-[400px] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col shrink-0 overflow-hidden">
+                <div class="p-3 bg-blue-50 border-b border-blue-200 shrink-0">
+                    <h2 class="text-md font-bold text-blue-900">물량 산출 (위치 및 치수 입력)</h2>
+                </div>
+                
+                <div id="tk-form-inner" class="flex flex-col h-full overflow-hidden">
+                    <div class="p-4 overflow-y-auto flex-grow bg-white space-y-4">
+                        <div class="grid-compact">
+                            <div class="input-group">
+                                <label class="input-label text-blue-700">1. 부재 카테고리</label>
+                                <select id="tk_cat" class="input-field bg-slate-50" onchange="updateTakeoffUI()">
+                                    <option value="foundation">기초</option><option value="column">기둥</option><option value="beam">보</option><option value="slab">슬래브</option><option value="wall">벽체</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label text-blue-700">2. 적용 일람표(Mark)</label>
+                                <select id="tk_sch_id" class="input-field border-blue-300 font-bold bg-blue-50/50" onchange="renderTakeoffDims()"></select>
+                                <p id="tk_sch_empty" class="text-[10px] text-red-500 mt-1 hidden">일람표가 없습니다.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label text-emerald-700">3. 산출 위치 (Location) - 텍스트 입력</label>
+                            <input type="text" id="tk_loc" class="input-field border-emerald-200 font-medium" placeholder="예: 1층 주차장, 지하1층 E구역">
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="sub-header">4. 시공 치수 입력 (mm)</div>
+                        <div id="tk_dim_wrap" class="panel-box bg-slate-50 grid-compact">
+                            <!-- 동적 생성 -->
+                        </div>
+                        
+                        <div class="input-group mt-3">
+                            <label class="input-label">적용 개수 (EA)</label>
+                            <input type="number" id="tk_count" class="input-field bg-indigo-50 border-indigo-200 font-bold" value="1" step="1">
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 border-t border-slate-200 shrink-0 flex gap-2">
+                        <button id="btn-tk-cancel" onclick="closeTkEditModal()" class="hidden w-1/3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md">
+                            취소
+                        </button>
+                        <button id="btn-tk-submit" onclick="calculateTakeoff()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md">
+                            산출 내역서에 추가
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 산출 리스트 및 집계 -->
+            <div class="w-full flex flex-col gap-3 overflow-hidden h-full">
+                <!-- 요약 -->
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 shrink-0 flex flex-col gap-3">
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <div class="flex-1 bg-blue-50/70 p-3 rounded-lg border border-blue-100 text-center">
+                            <p class="text-xs text-blue-600 font-bold mb-1">총 레미콘</p>
+                            <p class="text-xl font-black text-slate-900"><span id="tot-conc">0.000</span> <span class="text-xs font-normal">m³</span></p>
+                        </div>
+                        <div class="flex-1 bg-amber-50/70 p-3 rounded-lg border border-amber-100 text-center">
+                            <p class="text-xs text-amber-600 font-bold mb-1">총 거푸집</p>
+                            <p class="text-xl font-black text-slate-900"><span id="tot-form">0.000</span> <span class="text-xs font-normal">m²</span></p>
+                        </div>
+                        <div class="flex-1 bg-emerald-50/70 p-3 rounded-lg border border-emerald-100 text-center">
+                            <p class="text-xs text-emerald-600 font-bold mb-1">총 철근</p>
+                            <p class="text-xl font-black text-slate-900"><span id="tot-rebar">0.0</span> <span class="text-xs font-normal">kg</span></p>
+                        </div>
+                    </div>
+                    <!-- 철근 규격별 상세 -->
+                    <div class="pt-2 border-t border-slate-100">
+                        <h3 class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">규격별 철근 상세 (kg)</h3>
+                        <div id="rebar-summary" class="flex flex-wrap gap-2">
+                            <span class="text-xs text-slate-400">데이터 없음</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 리스트 -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-grow overflow-hidden flex flex-col">
+                    <div class="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                        <h2 class="text-sm font-bold text-slate-800">산출 내역서 (Take-off List) <span class="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded ml-2 font-normal">행 더블클릭: 산식 확인/오버라이드</span></h2>
+                        <button onclick="clearTakeoff()" class="text-xs text-red-500 hover:text-red-700 font-bold">전체 삭제</button>
+                    </div>
+                    <div class="overflow-auto flex-grow bg-white">
+                        <table class="w-full text-sm text-left whitespace-nowrap">
+                            <thead class="text-xs text-slate-600 bg-slate-100 sticky top-0 shadow-sm z-10">
+                                <tr>
+                                    <th class="px-3 py-2 border-b">위치 (Location)</th>
+                                    <th class="px-3 py-2 border-b">구분/명칭</th>
+                                    <th class="px-3 py-2 border-b">산출 치수</th>
+                                    <th class="px-3 py-2 border-b text-right">레미콘(m³)</th>
+                                    <th class="px-3 py-2 border-b text-right">거푸집(m²)</th>
+                                    <th class="px-3 py-2 border-b text-right">철근 총중량(kg)</th>
+                                    <th class="px-3 py-2 border-b text-center">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="takeoff-tbody" class="divide-y divide-slate-100 cursor-pointer">
+                                <tr><td colspan="7" class="px-4 py-12 text-center text-slate-400 text-sm">산출된 내역이 없습니다.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ======================================================= -->
+    <!-- MODAL 1: 산출 폼 수정 팝업 (Edit Takeoff) -->
+    <!-- ======================================================= -->
+    <div id="tk-edit-modal" class="fixed inset-0 z-50 hidden modal-overlay flex items-center justify-center p-4">
+        <div id="tk-modal-content" class="w-full max-w-[420px] bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div class="p-3 bg-indigo-800 text-white border-b border-indigo-900 shrink-0 flex justify-between items-center">
+                <h2 class="text-md font-bold">산출 내역 수정</h2>
+                <button onclick="closeTkEditModal()" class="text-indigo-200 hover:text-white font-bold">✕</button>
+            </div>
+            <!-- tk-form-inner가 스크립트를 통해 이곳으로 이동합니다. -->
+        </div>
+    </div>
+
+    <!-- ======================================================= -->
+    <!-- MODAL 2: 산식 확인 및 직접 입력 (오버라이드) -->
+    <!-- ======================================================= -->
+    <div id="formula-modal" class="fixed inset-0 z-50 hidden modal-overlay flex items-center justify-center p-4">
+        <div class="w-full max-w-[700px] bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b border-slate-200 flex justify-between items-center shrink-0">
+                <h2 class="text-lg font-bold text-slate-800" id="fm-title">계산 산식 및 오버라이드 설정</h2>
+                <button onclick="closeFormulaModal()" class="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+            </div>
+            
+            <div class="p-4 overflow-y-auto flex-grow space-y-4 text-sm" id="fm-content">
+                <!-- 레미콘 섹션 -->
+                <div class="border border-blue-200 rounded-lg overflow-hidden">
+                    <div class="bg-blue-50 p-2 font-bold text-blue-800 flex justify-between items-center flex-wrap gap-2">
+                        <span>■ 레미콘 (m³)</span>
+                        <div class="flex items-center gap-3 text-xs font-normal">
+                            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="ov_conc_excl" onchange="toggleOverride('conc')"><span class="text-red-600 font-bold">계산 제외</span></label>
+                            <div class="flex items-center gap-1">직접 입력: <input type="text" id="ov_conc_val" class="border border-slate-300 rounded px-1 w-24 text-right font-bold" oninput="formatCommaInput(this)" placeholder="수동값"></div>
+                        </div>
+                    </div>
+                    <div class="p-3 font-mono text-slate-600 text-xs bg-white" id="fm-conc"></div>
+                </div>
+
+                <!-- 거푸집 섹션 -->
+                <div class="border border-amber-200 rounded-lg overflow-hidden">
+                    <div class="bg-amber-50 p-2 font-bold text-amber-800 flex justify-between items-center flex-wrap gap-2">
+                        <span>■ 거푸집 (m²)</span>
+                        <div class="flex items-center gap-3 text-xs font-normal">
+                            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="ov_form_excl" onchange="toggleOverride('form')"><span class="text-red-600 font-bold">계산 제외</span></label>
+                            <div class="flex items-center gap-1">직접 입력: <input type="text" id="ov_form_val" class="border border-slate-300 rounded px-1 w-24 text-right font-bold" oninput="formatCommaInput(this)" placeholder="수동값"></div>
+                        </div>
+                    </div>
+                    <div class="p-3 font-mono text-slate-600 text-xs bg-white" id="fm-form"></div>
+                </div>
+
+                <!-- 철근 섹션 -->
+                <div class="border border-emerald-200 rounded-lg overflow-hidden">
+                    <div class="bg-emerald-50 p-2 font-bold text-emerald-800 flex justify-between items-center flex-wrap gap-2">
+                        <span>■ 철근 총중량 (kg)</span>
+                        <div class="flex items-center gap-3 text-xs font-normal">
+                            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="ov_rebar_excl" onchange="toggleOverride('rebar')"><span class="text-red-600 font-bold">계산 제외</span></label>
+                            <div class="flex items-center gap-1">총중량 입력: <input type="text" id="ov_rebar_val" class="border border-slate-300 rounded px-1 w-28 text-right font-bold" oninput="formatCommaInput(this)" placeholder="수동값"></div>
+                        </div>
+                    </div>
+                    <div class="p-3 font-mono text-slate-600 text-[11px] bg-white space-y-1" id="fm-rebar"></div>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex gap-2 justify-end">
+                <button onclick="closeFormulaModal()" class="px-4 py-2 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-sm">취소</button>
+                <button onclick="saveOverrides()" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm">설정 적용 및 닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 철근 단위 중량 (kg/m)
+        const UNIT_WEIGHTS = {
+            'HD10': 0.56, 'HD13': 0.995, 'HD16': 1.56, 'HD19': 2.25,
+            'HD22': 3.04, 'HD25': 3.98
+        };
+
+        let schedules = [];
+        let takeoffs = [];
+        let schIdCounter = 1;
+        let tkIdCounter = 1;
+        let currentEditingTkId = null;
+
+        // 초기화
+        window.onload = function() {
+            populateRebarOptions();
+            updateSchUI();
+            updateTakeoffUI();
+        };
+
+        // 콤마 처리 로직
+        function formatCommaInput(el) {
+            let val = el.value.replace(/[^\d.]/g, '');
+            let parts = val.split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            if(parts.length > 2) parts = [parts[0], parts.slice(1).join('')];
+            el.value = parts.join('.');
+        }
+
+        function formatCommaString(val) {
+            if(val === null || val === undefined || val === '') return '';
+            let parts = val.toString().split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            return parts.join('.');
+        }
+
+        function parseComma(val) {
+            if(!val) return null;
+            return parseFloat(val.toString().replace(/,/g, ''));
+        }
+
+        function populateRebarOptions() {
+            const opts = Object.keys(UNIT_WEIGHTS).map(k => `<option value="${k}">${k}</option>`).join('');
+            document.querySelectorAll('.rebar-opts').forEach(el => el.innerHTML = opts);
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById('view-schedule').classList.add('section-hidden');
+            document.getElementById('view-takeoff').classList.add('section-hidden');
+            document.getElementById(`view-${tab}`).classList.remove('section-hidden');
+            if(tab === 'takeoff') updateTakeoffUI(); 
+        }
+
+        // ==========================================
+        // 1. 일람표 (Schedule) 로직
+        // ==========================================
+        function updateSchUI() {
+            const cat = document.getElementById('sch_cat').value;
+            document.querySelectorAll('.sch-section').forEach(el => el.classList.add('section-hidden'));
+            const wrapId = `sch_${cat === 'foundation' ? 'fnd' : cat === 'column' ? 'col' : cat === 'beam' ? 'bm' : cat === 'slab' ? 'slb' : 'wall'}_wrap`;
+            document.getElementById(wrapId).classList.remove('section-hidden');
+            if(cat === 'foundation') toggleFndType();
+            if(cat === 'beam') toggleBmType();
+        }
+
+        function toggleFndType() {
+            const type = document.getElementById('sch_fnd_type').value;
+            const isoPanel = document.getElementById('sch_fnd_iso_panel');
+            const matPanel = document.getElementById('sch_fnd_mat_panel');
+            const layerWrap = document.getElementById('sch_fnd_layer_wrap');
+
+            isoPanel.classList.add('section-hidden'); 
+            matPanel.classList.add('section-hidden');
+            
+            if(type === 'isolated') {
+                isoPanel.classList.remove('section-hidden');
+                layerWrap.classList.add('section-hidden');
+            } else if (type === 'mat' || type === 'strip') {
+                matPanel.classList.remove('section-hidden');
+                layerWrap.classList.remove('section-hidden');
+                if (type === 'strip') {
+                    document.getElementById('sch_fnd_y_sz_wrap').classList.add('section-hidden');
+                    document.getElementById('sch_fnd_y_sp_wrap').classList.add('section-hidden');
+                    document.getElementById('sch_fnd_tie_label').innerText = "줄기초 횡방향 띠장 기준";
+                } else {
+                    document.getElementById('sch_fnd_y_sz_wrap').classList.remove('section-hidden');
+                    document.getElementById('sch_fnd_y_sp_wrap').classList.remove('section-hidden');
+                    document.getElementById('sch_fnd_tie_label').innerText = "측면 띠장/배력근 기준";
+                }
+            }
+        }
+
+        function toggleBmType() {
+            const type = document.getElementById('sch_bm_type').value;
+            const midPanel = document.getElementById('sch_bm_mid_panel');
+            const strMidWrap = document.getElementById('sch_bm_str_mid_sp_wrap');
+            const lblStrEnd = document.getElementById('lbl_bm_str_end_sp');
+            const strEndWrap = document.getElementById('sch_bm_str_end_sp_wrap');
+            
+            if (type === 'simple') {
+                midPanel.classList.add('section-hidden');
+                strMidWrap.classList.add('section-hidden');
+                strEndWrap.classList.add('grid-span-2');
+                lblStrEnd.innerText = '늑근 간격(mm)';
+            } else {
+                midPanel.classList.remove('section-hidden');
+                strMidWrap.classList.remove('section-hidden');
+                strEndWrap.classList.remove('grid-span-2');
+                lblStrEnd.innerText = '단부 간격(mm)';
+            }
+        }
+
+        function collectSchInputs() {
+            let data = {};
+            document.querySelectorAll('#view-schedule input, #view-schedule select').forEach(el => {
+                if(el.id && !el.closest('.section-hidden')) {
+                    data[el.id] = el.value;
+                } else if(el.id) {
+                    data[el.id] = el.value;
+                }
+            });
+            return data;
+        }
+
+        function registerSchedule() {
+            const cat = document.getElementById('sch_cat').value;
+            const mark = document.getElementById('sch_mark').value.trim() || `Untitiled-${schIdCounter}`;
+            
+            schedules.push({ id: schIdCounter++, cat: cat, mark: mark, data: collectSchInputs() });
+            renderScheduleList();
+            document.getElementById('sch_mark').value = '';
+            
+            // 피드백 애니메이션
+            const btn = document.getElementById('btn-sch-submit');
+            btn.innerText = "✅ 마스터 등록 완료!";
+            btn.classList.add('bg-green-600', 'hover:bg-green-700');
+            btn.classList.remove('bg-slate-800', 'hover:bg-slate-900');
+            setTimeout(() => {
+                btn.innerText = "일람표 마스터에 등록";
+                btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                btn.classList.add('bg-slate-800', 'hover:bg-slate-900');
+            }, 1500);
+        }
+
+        function renderScheduleList() {
+            const container = document.getElementById('schedule-list-container');
+            if(schedules.length === 0) {
+                container.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400 text-sm">등록된 부재 일람이 없습니다. 좌측 폼에서 등록해주세요.</div>`;
+                return;
+            }
+            container.innerHTML = '';
+            schedules.forEach(sch => {
+                const names = {foundation:'기초', column:'기둥', beam:'보', slab:'슬래브', wall:'벽체'};
+                container.innerHTML += `
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-sm relative">
+                        <button onclick="deleteSchedule(${sch.id})" class="absolute top-2 right-2 text-slate-400 hover:text-red-500 font-bold">✕</button>
+                        <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded uppercase font-bold">${names[sch.cat]}</span>
+                        <h3 class="text-md font-black text-slate-800 mt-1">${sch.mark}</h3>
+                    </div>
+                `;
+            });
+        }
+
+        function deleteSchedule(id) {
+            if(confirm("삭제하시겠습니까? 해당 마스터를 지워도 기 산출된 데이터는 유지됩니다.")) {
+                schedules = schedules.filter(s => s.id !== id);
+                renderScheduleList();
+                updateTakeoffUI(); 
+            }
+        }
+
+        // ==========================================
+        // 2. 물량 산출 (Take-off) 로직
+        // ==========================================
+        function updateTakeoffUI() {
+            const cat = document.getElementById('tk_cat').value;
+            const dropdown = document.getElementById('tk_sch_id');
+            const filteredSch = schedules.filter(s => s.cat === cat);
+            dropdown.innerHTML = '';
+            
+            if(filteredSch.length === 0) {
+                document.getElementById('tk_sch_empty').classList.remove('hidden'); dropdown.disabled = true;
+            } else {
+                document.getElementById('tk_sch_empty').classList.add('hidden'); dropdown.disabled = false;
+                filteredSch.forEach(s => { dropdown.innerHTML += `<option value="${s.id}">${s.mark}</option>`; });
+            }
+            renderTakeoffDims();
+        }
+
+        function renderTakeoffDims() {
+            const schId = parseInt(document.getElementById('tk_sch_id').value);
+            const sch = schedules.find(s => s.id === schId);
+            const dimWrap = document.getElementById('tk_dim_wrap');
+            dimWrap.innerHTML = '';
+
+            if(!sch) return;
+
+            const cat = sch.cat;
+            if(cat === 'foundation') {
+                if(sch.data.sch_fnd_type === 'isolated') {
+                    dimWrap.innerHTML = `
+                        <div class="input-group grid-span-2"><label class="input-label">기초 높이 (H)</label><input type="number" id="tk_h" class="input-field" step="10"></div>
+                        <div class="text-[10px] text-slate-500 grid-span-2">* W, L은 일람표에서 참조됩니다.</div>
+                    `;
+                } else {
+                    dimWrap.innerHTML = `
+                        <div class="input-group"><label class="input-label">가로 폭 (W)</label><input type="number" id="tk_w" class="input-field" step="10"></div>
+                        <div class="input-group"><label class="input-label">세로 길이 (L)</label><input type="number" id="tk_l" class="input-field" step="10"></div>
+                        <div class="input-group grid-span-2"><label class="input-label">높이 (H)</label><input type="number" id="tk_h" class="input-field" step="10"></div>
+                    `;
+                }
+            } else if (cat === 'beam') {
+                let endLHtml = '';
+                if(sch.data.sch_bm_type !== 'simple') {
+                    endLHtml = `<div class="input-group"><label class="input-label text-slate-500">단부 1개소 길이</label><input type="number" id="tk_endL" class="input-field" placeholder="보통 L/4"></div>`;
+                }
+
+                dimWrap.innerHTML = `
+                    <div class="input-group"><label class="input-label">총 길이 (L)</label><input type="number" id="tk_l" class="input-field" step="10"></div>
+                    ${endLHtml}
+                    <div class="input-group grid-span-2 mt-2 pt-2 border-t border-slate-200">
+                        <label class="input-label text-indigo-700">연결 슬래브 두께 (중첩 공제용, T)</label>
+                        <input type="number" id="tk_slab_t" class="input-field" step="10" value="0" placeholder="슬래브와 일체타설 시 두께 입력">
+                    </div>
+                    <div class="text-[10px] text-slate-500 grid-span-2">* W, H는 일람표에서 참조됩니다.</div>
+                `;
+            } else if (cat === 'column') {
+                dimWrap.innerHTML = `
+                    <div class="input-group"><label class="input-label">가로 폭/지름 (W/D)</label><input type="number" id="tk_w" class="input-field" step="10"></div>
+                    <div class="input-group"><label class="input-label">세로 폭 (D) <span class="text-[10px] font-normal text-slate-400">*원형 무시</span></label><input type="number" id="tk_d" class="input-field" step="10"></div>
+                    <div class="input-group"><label class="input-label">기둥 층고 높이 (H)</label><input type="number" id="tk_h" class="input-field" step="10"></div>
+                    <div class="input-group"><label class="input-label text-slate-500">단부(주두) 길이</label><input type="number" id="tk_endL" class="input-field" placeholder="보통 H/6"></div>
+                `;
+            } else if (cat === 'slab') {
+                dimWrap.innerHTML = `
+                    <div class="input-group"><label class="input-label">가로 폭 (W)</label><input type="number" id="tk_w" class="input-field" step="10"></div>
+                    <div class="input-group"><label class="input-label">세로 길이 (L)</label><input type="number" id="tk_l" class="input-field" step="10"></div>
+                    <div class="input-group grid-span-2"><label class="input-label">두께 (T)</label><input type="number" id="tk_h" class="input-field" step="10"></div>
+                `;
+            } else if (cat === 'wall') {
+                dimWrap.innerHTML = `
+                    <div class="input-group"><label class="input-label">길이 (L)</label><input type="number" id="tk_w" class="input-field" step="10"></div>
+                    <div class="input-group"><label class="input-label">층고/높이 (H)</label><input type="number" id="tk_h" class="input-field" step="10"></div>
+                `;
+            }
+        }
+
+        function getVal(id) { const el = document.getElementById(id); return el ? (parseFloat(el.value) || 0) : 0; }
+        
+        function formatRebarFormula(name, sz, formulaStr, resLen, EA) {
+            return `[${name} - ${sz}] ${formulaStr} = <b>${(resLen * EA).toFixed(2)}m</b>`;
+        }
+
+        function collectTkInputs() {
+            let data = {};
+            document.querySelectorAll('#tk-form-inner input, #tk-form-inner select').forEach(el => {
+                if(el.id) data[el.id] = el.value;
+            });
+            return data;
+        }
+
+        function calculateTakeoff() {
+            const schId = parseInt(document.getElementById('tk_sch_id').value);
+            const sch = schedules.find(s => s.id === schId);
+            if(!sch) { alert("적용할 일람표를 등록 및 선택하세요."); return; }
+
+            const cat = sch.cat;
+            const count = parseInt(document.getElementById('tk_count').value) || 1;
+            const loc = document.getElementById('tk_loc').value.trim() || '위치 미지정';
+            const sd = sch.data;
+
+            let w = getVal('tk_w')/1000, l = getVal('tk_l')/1000, h = getVal('tk_h')/1000, d = getVal('tk_d')/1000, endL = getVal('tk_endL')/1000, slabT = getVal('tk_slab_t')/1000;
+
+            if (cat === 'foundation' && sd.sch_fnd_type === 'isolated') {
+                w = parseFloat(sd.sch_fnd_iso_w || 0)/1000; l = parseFloat(sd.sch_fnd_iso_l || 0)/1000;
+            } else if (cat === 'beam') {
+                w = parseFloat(sd.sch_bm_w || 0)/1000; h = parseFloat(sd.sch_bm_h || 0)/1000;
+            }
+            
+            let item = {
+                id: currentEditingTkId !== null ? currentEditingTkId : tkIdCounter++, 
+                schId: sch.id, mark: sch.mark, cat: cat, count: count, loc: loc,
+                rawInputs: collectTkInputs(), // 수정을 위해 raw input 보존
+                dims: { w: w, l: l, h: h, d: d, endL: endL, slabT: slabT },
+                res: { conc: 0, form: 0, rebars: [] },
+                formulas: { conc: '', form: '', rebars: [] },
+                overrides: { conc: {ex: false, val: null}, form: {ex: false, val: null}, rebar: {ex: false, val: null} }
+            };
+
+            // 수정 모드일 때 기존 overrides 보존
+            if(currentEditingTkId !== null) {
+                const oldItem = takeoffs.find(t => t.id === currentEditingTkId);
+                if(oldItem) item.overrides = oldItem.overrides;
+            }
+
+            try {
+                // 1. 기초
+                if (cat === 'foundation') {
+                    if(w*l*h === 0) throw new Error("치수를 모두 입력하세요.");
+                    item.res.conc = w * l * h;
+                    item.formulas.conc = `(${w} × ${l} × ${h}) × ${count}개 = ${(item.res.conc*count).toFixed(3)}`;
+                    
+                    const type = sd.sch_fnd_type;
+
+                    if(type === 'isolated') {
+                        item.res.form = (w + l) * 2 * h;
+                        item.formulas.form = `(${w} + ${l}) × 2 × ${h} × ${count}개 = ${(item.res.form*count).toFixed(3)}`;
+                        
+                        const vSz = sd.sch_fnd_iso_v_sz, vQty = parseFloat(sd.sch_fnd_iso_v_qty)||0;
+                        item.res.rebars.push({ sz: vSz, len: vQty * h, wt: (vQty * h) * UNIT_WEIGHTS[vSz] });
+                        item.formulas.rebars.push(formatRebarFormula('수직근', vSz, `(${vQty}가닥 × 높이${h}m) × ${count}개`, vQty * h, count));
+                        
+                        // 띠장 BOTH
+                        const bothSz = sd.sch_fnd_iso_tie_both_sz, bothSp = parseFloat(sd.sch_fnd_iso_tie_both_sp)/1000;
+                        let bothQty = Math.floor((h/4) / bothSp) + 1;
+                        let bothLen = bothQty * 2 * (w+l)*2;
+                        item.res.rebars.push({ sz: bothSz, len: bothLen, wt: bothLen * UNIT_WEIGHTS[bothSz] });
+                        item.formulas.rebars.push(formatRebarFormula('띠장(BOTH)', bothSz, `((${h.toFixed(3)}/4) / ${bothSp} + 1)조 × 2단 × 둘레(${(w+l)*2}m) × ${count}개`, bothLen, count));
+
+                        // 띠장 CENTER
+                        const cenSz = sd.sch_fnd_iso_tie_center_sz, cenSp = parseFloat(sd.sch_fnd_iso_tie_center_sp)/1000;
+                        let cenQty = Math.floor((h/2) / cenSp) + 1;
+                        let cenLen = cenQty * (w+l)*2;
+                        item.res.rebars.push({ sz: cenSz, len: cenLen, wt: cenLen * UNIT_WEIGHTS[cenSz] });
+                        item.formulas.rebars.push(formatRebarFormula('띠장(CENTER)', cenSz, `((${h.toFixed(3)}/2) / ${cenSp} + 1)조 × 둘레(${(w+l)*2}m) × ${count}개`, cenLen, count));
+
+                    } else if (type === 'mat') {
+                        item.res.form = (w + l) * 2 * h;
+                        item.formulas.form = `(${w} + ${l}) × 2 × ${h} × ${count}개 = ${(item.res.form*count).toFixed(3)}`;
+                        const isDouble = sd.sch_fnd_layer === 'double';
+                        const multi = isDouble ? 2 : 1;
+                        const multiStr = isDouble ? " × 2(상하복배근)" : "";
+
+                        const xSz = sd.sch_fnd_x_sz, xSp = parseFloat(sd.sch_fnd_x_sp)/1000;
+                        const ySz = sd.sch_fnd_y_sz, ySp = parseFloat(sd.sch_fnd_y_sp)/1000;
+                        
+                        let xQty = Math.floor(l / xSp) + 1;
+                        item.res.rebars.push({ sz: xSz, len: xQty * w * multi, wt: (xQty * w * multi) * UNIT_WEIGHTS[xSz] });
+                        item.formulas.rebars.push(formatRebarFormula('X주근', xSz, `((${l}/${xSp}+1)가닥 × ${w}m${multiStr}) × ${count}개`, xQty * w * multi, count));
+
+                        let yQty = Math.floor(w / ySp) + 1;
+                        item.res.rebars.push({ sz: ySz, len: yQty * l * multi, wt: (yQty * l * multi) * UNIT_WEIGHTS[ySz] });
+                        item.formulas.rebars.push(formatRebarFormula('Y부근', ySz, `((${w}/${ySp}+1)가닥 × ${l}m${multiStr}) × ${count}개`, yQty * l * multi, count));
+                        
+                        if(sd.sch_fnd_tie_sz !== 'none') {
+                            const tSz = sd.sch_fnd_tie_sz, tSp = parseFloat(sd.sch_fnd_tie_sp)/1000;
+                            let tQty = Math.floor(h / tSp);
+                            let peri = (w+l)*2;
+                            item.res.rebars.push({ sz: tSz, len: peri*tQty, wt: peri*tQty * UNIT_WEIGHTS[tSz] });
+                            item.formulas.rebars.push(formatRebarFormula('띠장', tSz, `둘레(${peri}m) × ${tQty}단 × ${count}개`, peri*tQty, count));
+                        }
+                    } else if (type === 'strip') {
+                        item.res.form = l * h * 2;
+                        item.formulas.form = `${l} × ${h} × 2면 × ${count}개 = ${(item.res.form*count).toFixed(3)}`;
+                        const isDouble = sd.sch_fnd_layer === 'double';
+                        const multi = isDouble ? 2 : 1;
+                        const multiStr = isDouble ? " × 2(상하복배근)" : "";
+
+                        const xSz = sd.sch_fnd_x_sz, xSp = parseFloat(sd.sch_fnd_x_sp)/1000;
+                        let xQty = Math.floor(w / xSp) + 1;
+                        item.res.rebars.push({ sz: xSz, len: xQty * l * multi, wt: (xQty * l * multi) * UNIT_WEIGHTS[xSz] });
+                        item.formulas.rebars.push(formatRebarFormula('주근(X)', xSz, `((${w}/${xSp}+1)가닥 × ${l}m${multiStr}) × ${count}개`, xQty * l * multi, count));
+                        
+                        if(sd.sch_fnd_tie_sz !== 'none') {
+                            const tSz = sd.sch_fnd_tie_sz, tSp = parseFloat(sd.sch_fnd_tie_sp)/1000;
+                            let tQty = Math.floor(l / tSp) + 1;
+                            let peri = (w+h)*2;
+                            item.res.rebars.push({ sz: tSz, len: peri*tQty, wt: peri*tQty * UNIT_WEIGHTS[tSz] });
+                            item.formulas.rebars.push(formatRebarFormula('띠장', tSz, `단면둘레(${peri}m) × ${tQty}단 × ${count}개`, peri*tQty, count));
+                        }
+                    }
+                }
+                // 2. 기둥
+                else if (cat === 'column') {
+                    if(w*h === 0) throw new Error("폭/지름 및 높이를 입력하세요.");
+                    const type = sd.sch_col_type;
+                    let peri = 0;
+
+                    if(type === 'square') {
+                        item.res.conc = w * d * h;
+                        item.formulas.conc = `(${w} × ${d} × ${h}) × ${count}개 = ${(item.res.conc*count).toFixed(3)}`;
+                        item.res.form = (w + d) * 2 * h;
+                        item.formulas.form = `(${w} + ${d}) × 2 × ${h} × ${count}개 = ${(item.res.form*count).toFixed(3)}`;
+                        peri = (w + d) * 2;
+                    } else {
+                        item.res.conc = Math.PI * Math.pow(w/2, 2) * h;
+                        item.formulas.conc = `(π × (${w}/2)² × ${h}) × ${count}개 = ${(item.res.conc*count).toFixed(3)}`;
+                        item.res.form = Math.PI * w * h;
+                        item.formulas.form = `(π × ${w} × ${h}) × ${count}개 = ${(item.res.form*count).toFixed(3)}`;
+                        peri = Math.PI * w;
+                    }
+
+                    const mSz = sd.sch_col_main_sz, mQty = parseFloat(sd.sch_col_main_qty);
+                    item.res.rebars.push({ sz: mSz, len: mQty * h, wt: mQty * h * UNIT_WEIGHTS[mSz] });
+                    item.formulas.rebars.push(formatRebarFormula('주근', mSz, `${mQty}가닥 × ${h}m × ${count}개`, mQty * h, count));
+
+                    if(sd.sch_col_tie_sz !== 'none') {
+                        const tSz = sd.sch_col_tie_sz, eSp = parseFloat(sd.sch_col_tie_end_sp)/1000, mSp = parseFloat(sd.sch_col_tie_mid_sp)/1000;
+                        let aEndL = (endL * 2 >= h) ? h/2 : endL; 
+                        let midL = h - (aEndL * 2);
+                        let eQty = Math.floor((aEndL*2) / eSp);
+                        let mQty = Math.floor(midL / mSp) + 1;
+
+                        item.res.rebars.push({ sz: tSz, len: peri * eQty, wt: peri * eQty * UNIT_WEIGHTS[tSz] });
+                        item.formulas.rebars.push(formatRebarFormula('단부띠장', tSz, `둘레(${peri.toFixed(2)}m) × ${eQty}조 × ${count}개`, peri * eQty, count));
+                        if(midL > 0) {
+                            item.res.rebars.push({ sz: tSz, len: peri * mQty, wt: peri * mQty * UNIT_WEIGHTS[tSz] });
+                            item.formulas.rebars.push(formatRebarFormula('중앙띠장', tSz, `둘레(${peri.toFixed(2)}m) × ${mQty}조 × ${count}개`, peri * mQty, count));
+                        }
+                    }
+                }
+                // 3. 보 
+                else if (cat === 'beam') {
+                    if(w*h*l === 0) throw new Error("마스터에 보 폭, 춤이 입력되었는지 확인하고 산출 길이를 입력하세요.");
+                    
+                    let effH = Math.max(0, h - slabT); // 슬래브 두께 제외한 유효 춤
+                    let formH = effH * 2; 
+
+                    item.res.conc = w * effH * l;
+                    item.formulas.conc = `(${w} × (춤${h}-슬${slabT}) × ${l}) × ${count}개 = ${(item.res.conc*count).toFixed(3)}`;
+                    item.res.form = (w + formH) * l;
+                    item.formulas.form = `(하부${w} + 유효측면${effH}×2) × ${l} × ${count}개 = ${(item.res.form*count).toFixed(3)}`;
+
+                    const peri = (w + h) * 2; 
+                    let type = sd.sch_bm_type;
+
+                    let tSz = sd.sch_bm_top_sz, tQty = parseFloat(sd.sch_bm_top_qty) || 0;
+                    let bSz = sd.sch_bm_bot_sz, bQty = parseFloat(sd.sch_bm_bot_qty) || 0;
+
+                    if(type === 'simple') {
+                        item.res.rebars.push({sz: tSz, len: tQty*l, wt: tQty*l*UNIT_WEIGHTS[tSz]});
+                        item.formulas.rebars.push(formatRebarFormula('상부근', tSz, `${tQty}가닥 × ${l}m × ${count}개`, tQty*l, count));
+                        item.res.rebars.push({sz: bSz, len: bQty*l, wt: bQty*l*UNIT_WEIGHTS[bSz]});
+                        item.formulas.rebars.push(formatRebarFormula('하부근', bSz, `${bQty}가닥 × ${l}m × ${count}개`, bQty*l, count));
+                        
+                        let stSz = sd.sch_bm_str_sz, eSp = parseFloat(sd.sch_bm_str_end_sp)/1000;
+                        if (stSz !== 'none') {
+                            let eQty = Math.floor(l / eSp) + 1;
+                            item.res.rebars.push({sz: stSz, len: peri*eQty, wt: peri*eQty*UNIT_WEIGHTS[stSz]});
+                            item.formulas.rebars.push(formatRebarFormula('늑근', stSz, `둘레(${peri}m) × ${eQty}조 × ${count}개`, peri*eQty, count));
+                        }
+                    } else {
+                        let aEndL = (endL * 2 >= l) ? l/2 : endL;
+                        let totalEndL = aEndL * 2, midL = l - totalEndL;
+
+                        item.res.rebars.push({sz: tSz, len: tQty*totalEndL, wt: tQty*totalEndL*UNIT_WEIGHTS[tSz]});
+                        item.formulas.rebars.push(formatRebarFormula('단부상부', tSz, `${tQty}가닥 × 단부(${totalEndL}m) × ${count}개`, tQty*totalEndL, count));
+                        item.res.rebars.push({sz: bSz, len: bQty*totalEndL, wt: bQty*totalEndL*UNIT_WEIGHTS[bSz]});
+                        item.formulas.rebars.push(formatRebarFormula('단부하부', bSz, `${bQty}가닥 × 단부(${totalEndL}m) × ${count}개`, bQty*totalEndL, count));
+
+                        let mtSz = sd.sch_bm_m_top_sz, mtQty = parseFloat(sd.sch_bm_m_top_qty) || 0;
+                        let mbSz = sd.sch_bm_m_bot_sz, mbQty = parseFloat(sd.sch_bm_m_bot_qty) || 0;
+                        item.res.rebars.push({sz: mtSz, len: mtQty*midL, wt: mtQty*midL*UNIT_WEIGHTS[mtSz]});
+                        item.formulas.rebars.push(formatRebarFormula('중앙상부', mtSz, `${mtQty}가닥 × 중앙(${midL}m) × ${count}개`, mtQty*midL, count));
+                        item.res.rebars.push({sz: mbSz, len: mbQty*midL, wt: mbQty*midL*UNIT_WEIGHTS[mbSz]});
+                        item.formulas.rebars.push(formatRebarFormula('중앙하부', mbSz, `${mbQty}가닥 × 중앙(${midL}m) × ${count}개`, mbQty*midL, count));
+
+                        let stSz = sd.sch_bm_str_sz, eSp = parseFloat(sd.sch_bm_str_end_sp)/1000, mSp = parseFloat(sd.sch_bm_str_mid_sp)/1000;
+                        if(stSz !== 'none') {
+                            let eQty = Math.floor(totalEndL / eSp);
+                            item.res.rebars.push({sz: stSz, len: peri*eQty, wt: peri*eQty*UNIT_WEIGHTS[stSz]});
+                            item.formulas.rebars.push(formatRebarFormula('단부늑근', stSz, `둘레(${peri}m) × ${eQty}조 × ${count}개`, peri*eQty, count));
+                            
+                            if(midL > 0) {
+                                let mQty = Math.floor(midL / mSp) + 1;
+                                item.res.rebars.push({sz: stSz, len: peri*mQty, wt: peri*mQty*UNIT_WEIGHTS[stSz]});
+                                item.formulas.rebars.push(formatRebarFormula('중앙늑근', stSz, `둘레(${peri}m) × ${mQty}조 × ${count}개`, peri*mQty, count));
+                            }
+                        }
+                    }
+
+                    if(sd.sch_bm_side_sz !== 'none') {
+                        let sdSz = sd.sch_bm_side_sz, sdQty = parseFloat(sd.sch_bm_side_qty) || 0;
+                        item.res.rebars.push({sz: sdSz, len: sdQty*l, wt: sdQty*l*UNIT_WEIGHTS[sdSz]});
+                        item.formulas.rebars.push(formatRebarFormula('보조표피근', sdSz, `${sdQty}가닥 × ${l}m × ${count}개`, sdQty*l, count));
+                    }
+                }
+                // 4. 슬래브
+                else if (cat === 'slab') {
+                    const slabH = h; 
+                    if(w*l*slabH === 0) throw new Error("슬래브 가로, 세로, 두께를 입력하세요.");
+                    item.res.conc = w * l * slabH;
+                    item.formulas.conc = `(${w} × ${l} × 두께${slabH}) × ${count}개 = ${(item.res.conc*count).toFixed(3)}`;
+                    item.res.form = w * l; 
+                    item.formulas.form = `(${w} × ${l}) × ${count}개 = ${(item.res.form*count).toFixed(3)} (하부)`;
+
+                    let multi = sd.sch_slb_type === 'double' ? 2 : 1;
+                    let multiStr = sd.sch_slb_type === 'double' ? " × 2상하" : "";
+                    
+                    let mSz = sd.sch_slb_main_sz, mSp = parseFloat(sd.sch_slb_main_sp)/1000;
+                    let mQty = Math.floor(w / mSp) + 1;
+                    item.res.rebars.push({sz: mSz, len: mQty*l*multi, wt: mQty*l*multi*UNIT_WEIGHTS[mSz]});
+                    item.formulas.rebars.push(formatRebarFormula('주근', mSz, `((${w}/${mSp}+1)가닥 × ${l}m${multiStr}) × ${count}개`, mQty*l*multi, count));
+                    
+                    let sSz = sd.sch_slb_sub_sz, sSp = parseFloat(sd.sch_slb_sub_sp)/1000;
+                    let sQty = Math.floor(l / sSp) + 1;
+                    item.res.rebars.push({sz: sSz, len: sQty*w*multi, wt: sQty*w*multi*UNIT_WEIGHTS[sSz]});
+                    item.formulas.rebars.push(formatRebarFormula('부근', sSz, `((${l}/${sSp}+1)가닥 × ${w}m${multiStr}) × ${count}개`, sQty*w*multi, count));
+                }
+                // 5. 벽체 (Wall)
+                else if (cat === 'wall') {
+                    const t = parseFloat(sd.sch_wall_t)/1000;
+                    if(w*h*t === 0) throw new Error("벽체 길이(W), 층고(H)를 확인하세요 (마스터에 두께 필요).");
+                    item.res.conc = w * h * t;
+                    item.formulas.conc = `(길이${w} × 높이${h} × 두께${t}) × ${count}개 = ${(item.res.conc*count).toFixed(3)}`;
+                    item.res.form = w * h * 2;
+                    item.formulas.form = `(길이${w} × 높이${h} × 2면) × ${count}개 = ${(item.res.form*count).toFixed(3)}`;
+
+                    let multi = sd.sch_wall_type === 'double' ? 2 : 1;
+                    let multiStr = sd.sch_wall_type === 'double' ? " × 2(복배근)" : "";
+
+                    let vSz = sd.sch_wall_v_sz, vSp = parseFloat(sd.sch_wall_v_sp)/1000;
+                    let vQty = Math.floor(w / vSp) + 1;
+                    item.res.rebars.push({sz: vSz, len: vQty*h*multi, wt: vQty*h*multi*UNIT_WEIGHTS[vSz]});
+                    item.formulas.rebars.push(formatRebarFormula('수직근', vSz, `((${w}/${vSp}+1)가닥 × 높이${h}m${multiStr}) × ${count}개`, vQty*h*multi, count));
+
+                    let hSz = sd.sch_wall_h_sz, hSp = parseFloat(sd.sch_wall_h_sp)/1000;
+                    let hQty = Math.floor(h / hSp) + 1;
+                    item.res.rebars.push({sz: hSz, len: hQty*w*multi, wt: hQty*w*multi*UNIT_WEIGHTS[hSz]});
+                    item.formulas.rebars.push(formatRebarFormula('수평근', hSz, `((${h}/${hSp}+1)가닥 × 길이${w}m${multiStr}) × ${count}개`, hQty*w*multi, count));
+                }
+
+                if(currentEditingTkId !== null) {
+                    const idx = takeoffs.findIndex(t => t.id === currentEditingTkId);
+                    takeoffs[idx] = item;
+                } else {
+                    takeoffs.push(item);
+                }
+                
+                renderTakeoffList();
+                
+                // 피드백 애니메이션
+                const btn = document.getElementById('btn-tk-submit');
+                const originalText = currentEditingTkId !== null ? "수정 완료" : "산출 내역서에 추가";
+                btn.innerText = "✅ 처리 완료!";
+                btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                
+                if(currentEditingTkId !== null) closeTkEditModal(); // 수정 모드면 닫기
+
+                setTimeout(() => {
+                    btn.innerText = "산출 내역서에 추가";
+                    btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }, 1000);
+
+            } catch(e) { alert(e.message); }
+        }
+
+        // ==========================================
+        // 3. Edit 모달 (Takeoff 폼 이동 로직)
+        // ==========================================
+        function openTkEditModal(e, id) {
+            e.stopPropagation();
+            currentEditingTkId = id;
+            const item = takeoffs.find(t => t.id === id);
+
+            // 폼 컨테이너를 모달로 이동
+            const formInner = document.getElementById('tk-form-inner');
+            document.getElementById('tk-modal-content').appendChild(formInner);
+
+            // 데이터 복원
+            document.getElementById('tk_cat').value = item.cat;
+            updateTakeoffUI(); // 드롭다운 및 UI 업데이트
+            document.getElementById('tk_sch_id').value = item.schId;
+            renderTakeoffDims(); // 치수 입력창 업데이트
+
+            // 원본 입력값 복원
+            for(let key in item.rawInputs) {
+                const el = document.getElementById(key);
+                if(el) el.value = item.rawInputs[key];
+            }
+
+            document.getElementById('btn-tk-submit').innerText = "수정 완료";
+            document.getElementById('btn-tk-cancel').classList.remove('hidden');
+            
+            document.getElementById('tk-edit-modal').classList.remove('hidden');
+        }
+
+        function closeTkEditModal() {
+            currentEditingTkId = null;
+            const formInner = document.getElementById('tk-form-inner');
+            document.getElementById('tk-sidebar-container').appendChild(formInner);
+
+            document.getElementById('btn-tk-submit').innerText = "산출 내역서에 추가";
+            document.getElementById('btn-tk-cancel').classList.add('hidden');
+            
+            document.getElementById('tk-edit-modal').classList.add('hidden');
+        }
+
+
+        function getFinalValue(item, type) {
+            const ov = item.overrides[type];
+            if(ov.ex) return 0;
+            if(ov.val !== null && ov.val !== '') return parseComma(ov.val);
+            
+            let val = 0;
+            if(type === 'conc') val = item.res.conc * item.count;
+            if(type === 'form') val = item.res.form * item.count;
+            if(type === 'rebar') val = item.res.rebars.reduce((sum, r) => sum + (r.wt * item.count), 0);
+            return val;
+        }
+
+        function renderTakeoffList() {
+            const tbody = document.getElementById('takeoff-tbody');
+            const rebarSummaryDiv = document.getElementById('rebar-summary');
+
+            if(takeoffs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-12 text-center text-slate-400 text-sm">산출된 내역이 없습니다.</td></tr>`;
+                document.getElementById('tot-conc').innerText = '0.000';
+                document.getElementById('tot-form').innerText = '0.000';
+                document.getElementById('tot-rebar').innerText = '0.0';
+                rebarSummaryDiv.innerHTML = '<span class="text-xs text-slate-400">데이터 없음</span>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            let tConc = 0, tForm = 0, tRebarW = 0;
+            let rebarSums = {};
+
+            takeoffs.forEach(item => {
+                let conc = getFinalValue(item, 'conc');
+                let form = getFinalValue(item, 'form');
+                let rebar = getFinalValue(item, 'rebar');
+                
+                tConc += conc; tForm += form; tRebarW += rebar;
+
+                if (item.overrides.rebar.ex) {
+                    // 계산제외
+                } else if (item.overrides.rebar.val !== null && item.overrides.rebar.val !== '') {
+                    rebarSums['수동조정'] = (rebarSums['수동조정'] || 0) + parseComma(item.overrides.rebar.val);
+                } else {
+                    item.res.rebars.forEach(r => {
+                        rebarSums[r.sz] = (rebarSums[r.sz] || 0) + (r.wt * item.count);
+                    });
+                }
+
+                let badgeConc = item.overrides.conc.ex ? '<span class="badge-exclude">제외됨</span>' : (item.overrides.conc.val !== null && item.overrides.conc.val !== '' ? '<span class="badge-override">수동값</span>' : '');
+                let badgeForm = item.overrides.form.ex ? '<span class="badge-exclude">제외됨</span>' : (item.overrides.form.val !== null && item.overrides.form.val !== '' ? '<span class="badge-override">수동값</span>' : '');
+                let badgeRebar = item.overrides.rebar.ex ? '<span class="badge-exclude">제외됨</span>' : (item.overrides.rebar.val !== null && item.overrides.rebar.val !== '' ? '<span class="badge-override">수동값</span>' : '');
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50/50 transition-colors" ondblclick="openFormulaModal(${item.id})">
+                        <td class="px-3 py-2 border-b text-xs font-bold text-emerald-700">${item.loc}</td>
+                        <td class="px-3 py-2 border-b font-black text-blue-800">${item.mark} <span class="text-xs font-normal text-slate-500">(${item.count}개)</span></td>
+                        <td class="px-3 py-2 border-b text-xs text-slate-600 font-mono">W${item.dims.w} L${item.dims.l||item.dims.d} H${item.dims.h}</td>
+                        <td class="px-3 py-2 border-b text-right font-bold text-slate-700">${formatCommaString(conc.toFixed(3))}${badgeConc}</td>
+                        <td class="px-3 py-2 border-b text-right font-bold text-slate-700">${formatCommaString(form.toFixed(3))}${badgeForm}</td>
+                        <td class="px-3 py-2 border-b text-right font-bold text-emerald-600">${formatCommaString(rebar.toFixed(1))}${badgeRebar}</td>
+                        <td class="px-3 py-2 border-b text-center">
+                            <div class="flex items-center justify-center gap-1">
+                                <button onclick="openTkEditModal(event, ${item.id})" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded border border-slate-300">수정</button>
+                                <button onclick="deleteTakeoff(event, ${item.id})" class="text-[11px] bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2 py-1 rounded border border-red-200">삭제</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('tot-conc').innerText = formatCommaString(tConc.toFixed(3));
+            document.getElementById('tot-form').innerText = formatCommaString(tForm.toFixed(3));
+            document.getElementById('tot-rebar').innerText = formatCommaString(tRebarW.toFixed(1));
+
+            rebarSummaryDiv.innerHTML = '';
+            if (Object.keys(rebarSums).length === 0) {
+                rebarSummaryDiv.innerHTML = '<span class="text-xs text-slate-400">데이터 없음</span>';
+            } else {
+                Object.keys(rebarSums).sort().forEach(size => {
+                    const isManual = size === '수동조정';
+                    const colorClass = isManual ? 'text-amber-600' : 'text-emerald-600';
+                    rebarSummaryDiv.innerHTML += `
+                        <div class="flex items-center bg-white border ${isManual ? 'border-amber-200 bg-amber-50' : 'border-emerald-200'} shadow-sm rounded px-2 py-1">
+                            <span class="font-bold text-slate-700 text-xs">${size}</span> 
+                            <span class="${colorClass} font-bold text-xs ml-2">${formatCommaString(rebarSums[size].toFixed(1))} kg</span>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        function clearTakeoff() { if(confirm("모두 삭제하시겠습니까?")) { takeoffs = []; renderTakeoffList(); } }
+        function deleteTakeoff(e, id) { e.stopPropagation(); takeoffs = takeoffs.filter(t => t.id !== id); renderTakeoffList(); }
+
+        // ==========================================
+        // Modal Override 로직
+        // ==========================================
+        function openFormulaModal(id) {
+            const item = takeoffs.find(t => t.id === id);
+            currentEditingTkId = id; // 재활용 가능하도록 id 유지
+            
+            document.getElementById('fm-title').innerText = `[${item.loc}] ${item.mark} 계산 산식 / 수정`;
+            document.getElementById('fm-conc').innerHTML = item.formulas.conc;
+            document.getElementById('fm-form').innerHTML = item.formulas.form;
+            document.getElementById('fm-rebar').innerHTML = item.formulas.rebars.join('<br>');
+
+            document.getElementById('ov_conc_excl').checked = item.overrides.conc.ex;
+            document.getElementById('ov_conc_val').value = formatCommaString(item.overrides.conc.val);
+            document.getElementById('ov_form_excl').checked = item.overrides.form.ex;
+            document.getElementById('ov_form_val').value = formatCommaString(item.overrides.form.val);
+            document.getElementById('ov_rebar_excl').checked = item.overrides.rebar.ex;
+            document.getElementById('ov_rebar_val').value = formatCommaString(item.overrides.rebar.val);
+
+            toggleOverride('conc'); toggleOverride('form'); toggleOverride('rebar');
+            document.getElementById('formula-modal').classList.remove('hidden');
+        }
+
+        function toggleOverride(type) {
+            const isEx = document.getElementById(`ov_${type}_excl`).checked;
+            const valInput = document.getElementById(`ov_${type}_val`);
+            if(isEx) { valInput.disabled = true; valInput.classList.add('bg-slate-100'); valInput.value = ''; } 
+            else { valInput.disabled = false; valInput.classList.remove('bg-slate-100'); }
+        }
+
+        function saveOverrides() {
+            const item = takeoffs.find(t => t.id === currentEditingTkId);
+            
+            item.overrides.conc.ex = document.getElementById('ov_conc_excl').checked;
+            item.overrides.conc.val = document.getElementById('ov_conc_val').value || null;
+            item.overrides.form.ex = document.getElementById('ov_form_excl').checked;
+            item.overrides.form.val = document.getElementById('ov_form_val').value || null;
+            item.overrides.rebar.ex = document.getElementById('ov_rebar_excl').checked;
+            item.overrides.rebar.val = document.getElementById('ov_rebar_val').value || null;
+
+            closeFormulaModal();
+            renderTakeoffList();
+        }
+
+        function closeFormulaModal() { 
+            document.getElementById('formula-modal').classList.add('hidden'); 
+            currentEditingTkId = null; // 초기화
+        }
+
+        // ==========================================
+        // Export & Import
+        // ==========================================
+        function exportJSON() {
+            const data = { schedules, takeoffs, schIdCounter, tkIdCounter };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'RC_Takeoff_Data.json'; a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importJSON(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = JSON.parse(evt.target.result);
+                    if(data.schedules) schedules = data.schedules;
+                    if(data.takeoffs) takeoffs = data.takeoffs;
+                    if(data.schIdCounter) schIdCounter = data.schIdCounter;
+                    if(data.tkIdCounter) tkIdCounter = data.tkIdCounter;
+                    
+                    renderScheduleList();
+                    updateTakeoffUI();
+                    renderTakeoffList();
+                    alert("데이터를 성공적으로 불러왔습니다.");
+                } catch(err) { alert("올바른 JSON 파일이 아닙니다."); }
+            };
+            reader.readAsText(file);
+            e.target.value = ''; // Reset input
+        }
+
+        function exportExcel() {
+            if(takeoffs.length === 0) { alert("출력할 산출 내역이 없습니다."); return; }
+            let csv = '\uFEFF'; // UTF-8 BOM for Excel
+            csv += '위치,명칭,구분,산출치수,개수,레미콘(m3),레미콘산식,거푸집(m2),거푸집산식,철근총중량(kg),철근산식(상세)\n';
+            
+            let tConc = 0, tForm = 0, tRebarW = 0;
+            let rebarSums = {};
+
+            takeoffs.forEach(t => {
+                let conc = getFinalValue(t, 'conc');
+                let form = getFinalValue(t, 'form');
+                let rebar = getFinalValue(t, 'rebar');
+
+                tConc += conc; tForm += form; tRebarW += rebar;
+
+                // 철근 규격 합산
+                if (t.overrides.rebar.ex) {
+                } else if (t.overrides.rebar.val !== null && t.overrides.rebar.val !== '') {
+                    rebarSums['수동조정'] = (rebarSums['수동조정'] || 0) + parseComma(t.overrides.rebar.val);
+                } else {
+                    t.res.rebars.forEach(r => {
+                        rebarSums[r.sz] = (rebarSums[r.sz] || 0) + (r.wt * t.count);
+                    });
+                }
+
+                // 태그(HTML) 제거하여 산식만 추출
+                let fConc = t.formulas.conc.replace(/<[^>]*>?/gm, '');
+                let fForm = t.formulas.form.replace(/<[^>]*>?/gm, '');
+                let fRebar = t.formulas.rebars.join(' / ').replace(/<[^>]*>?/gm, '');
+
+                csv += `"${t.loc}","${t.mark}","${t.cat}","W${t.dims.w} L${t.dims.l||t.dims.d} H${t.dims.h}",${t.count},${conc.toFixed(3)},"${fConc}",${form.toFixed(3)},"${fForm}",${rebar.toFixed(1)},"${fRebar}"\n`;
+            });
+
+            csv += `\n[총 합계]\n`;
+            csv += `총 레미콘(m3),${tConc.toFixed(3)}\n`;
+            csv += `총 거푸집(m2),${tForm.toFixed(3)}\n`;
+            csv += `총 철근(kg),${tRebarW.toFixed(1)}\n`;
+
+            csv += `\n[규격별 철근 상세]\n`;
+            Object.keys(rebarSums).sort().forEach(size => {
+                csv += `${size},${rebarSums[size].toFixed(1)}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'RC_Takeoff_Export.csv'; a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

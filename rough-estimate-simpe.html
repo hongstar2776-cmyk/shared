@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>예조종합건설 가견적 산출 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for better UX */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen pb-20">
+
+    <div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Header -->
+        <header class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">🏗️ 건축 가견적 산출 시스템</h1>
+                <p class="text-sm text-slate-500 mt-1">과거 현장 데이터 기반 계량 분석 모델</p>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <!-- Unit Toggle -->
+                <div class="flex items-center bg-white rounded-lg p-1 shadow-sm border border-slate-200">
+                    <button id="btnM2" class="px-4 py-2 text-sm font-medium rounded-md text-slate-500 hover:text-slate-700 transition-colors" onclick="setUnit('m2')">㎡ (헤베)</button>
+                    <button id="btnPy" class="px-4 py-2 text-sm font-medium rounded-md bg-blue-50 text-blue-700 transition-colors" onclick="setUnit('py')">평 (坪)</button>
+                </div>
+                <!-- Settings Button -->
+                <button onclick="toggleSettingsModal()" class="p-2 bg-white rounded-lg shadow-sm border border-slate-200 text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="단가 계수 설정 (DB 연동용)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Input Form -->
+        <main class="space-y-6">
+            
+            <!-- Global Settings Card -->
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                    </svg>
+                    기본 대지 정보
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">신청지 (대지) 면적</label>
+                        <div class="relative">
+                            <input type="number" id="siteArea" class="w-full rounded-md border-slate-300 border px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" value="300" oninput="triggerRecalculate()">
+                            <span class="absolute right-4 top-2 text-slate-400 unit-label">평</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">부대토목 및 포장공사 면적 산정에 영향을 미칩니다.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">전체 건축 동수</label>
+                        <div class="flex items-center">
+                            <button onclick="changeBuildingCount(-1)" class="px-4 py-2 bg-slate-100 border border-slate-300 rounded-l-md hover:bg-slate-200 text-lg font-bold">-</button>
+                            <input type="number" id="buildingCount" readonly class="w-20 text-center border-y border-slate-300 py-2 focus:outline-none bg-white text-lg" value="1">
+                            <button onclick="changeBuildingCount(1)" class="px-4 py-2 bg-slate-100 border border-slate-300 rounded-r-md hover:bg-slate-200 text-lg font-bold">+</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dynamic Buildings Container -->
+            <div id="buildingsContainer" class="space-y-6">
+                <!-- Building forms will be injected here -->
+            </div>
+
+            <!-- Calculate Button -->
+            <button onclick="calculateCost()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex justify-center items-center gap-2 text-lg mt-8">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                가견적 산출하기
+            </button>
+
+            <!-- Results Section -->
+            <section id="resultSection" class="hidden bg-white rounded-xl shadow-lg border border-blue-100 overflow-hidden fade-in mt-8">
+                <div class="bg-blue-600 p-6 sm:p-8 text-white text-center relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMSIvPgo8cGF0aCBkPSJNMCAwTDggOFpNOCAwTDAgOFoiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLW9wYWNpdHk9IjAuMSIvPjwvc3ZnPg==')]"></div>
+                    <h2 class="text-blue-100 font-medium mb-2 relative z-10 text-lg">총 예상 공사비</h2>
+                    <div class="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight relative z-10 drop-shadow-md" id="totalCostDisplay">0원</div>
+                    
+                    <div class="mt-6 inline-flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 bg-white/10 rounded-xl px-6 py-3 backdrop-blur-sm border border-white/20 relative z-10">
+                        <span class="text-blue-100 text-sm">예상 평당 단가</span>
+                        <span class="text-2xl sm:text-3xl font-bold text-yellow-300" id="pyeongCostDisplay">0원/평</span>
+                    </div>
+                </div>
+
+                <div class="p-6">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex justify-between items-end">
+                        <span>공종별 세부 내역 (추정)</span>
+                        <span class="text-xs text-blue-600 font-normal bg-blue-50 px-2 py-1 rounded">💡 항목을 더블클릭하면 산출 근거를 볼 수 있습니다.</span>
+                    </h3>
+                    <div class="space-y-3" id="breakdownContainer">
+                        <!-- Breakdown items injected here -->
+                    </div>
+                    <p class="text-xs text-slate-400 mt-6 text-center">※ 본 데이터는 입력된 계수 기반이며, 실제 견적과 상이할 수 있습니다.</p>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Debug Log Modal Overlay -->
+    <div id="debugModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex justify-center items-center">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl m-4 max-h-[80vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <span id="debugModalTitle">산출 근거</span>
+                </h3>
+                <button onclick="closeDebugModal()" class="text-slate-400 hover:text-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-grow bg-white text-slate-700 text-sm" id="debugModalContent">
+                <!-- Debug log injected here -->
+            </div>
+
+            <div class="px-6 py-4 border-t bg-slate-50 flex justify-end">
+                <button onclick="closeDebugModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors">
+                    닫기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal Overlay (Matrix Style) -->
+    <div id="settingsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex justify-center items-center">
+        <div class="bg-white w-full max-w-[95vw] lg:max-w-7xl rounded-2xl shadow-2xl m-4 max-h-[95vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">DB 연동용 단가표 및 설정</h3>
+                <button onclick="toggleSettingsModal()" class="text-slate-400 hover:text-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
+                <div class="mb-4 p-3 bg-blue-50 text-blue-800 text-sm rounded-lg flex items-start gap-2">
+                    <svg class="h-5 w-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <p>현재 단위는 <strong><span class="unit-text-ko">평당</span></strong> 입니다. 수정된 값은 즉시 가견적 산출 알고리즘에 적용됩니다.</p>
+                </div>
+                
+                <!-- Matrix Table Container -->
+                <div class="bg-white border border-slate-200 rounded-xl overflow-x-auto shadow-sm">
+                    <table class="w-full text-sm text-left border-collapse min-w-[800px]">
+                        <thead class="bg-slate-100 text-slate-700">
+                            <tr>
+                                <th class="p-3 border-b border-r font-semibold sticky left-0 bg-slate-100 z-10 w-40 text-center">공종</th>
+                                <th class="p-3 border-b text-center font-bold">공장</th>
+                                <th class="p-3 border-b text-center font-bold">사무실</th>
+                                <th class="p-3 border-b text-center font-bold">소매점</th>
+                                <th class="p-3 border-b text-center font-bold">창고</th>
+                                <th class="p-3 border-b text-center font-bold">골프/체육</th>
+                                <th class="p-3 border-b text-center font-bold text-blue-600">필로티</th>
+                            </tr>
+                        </thead>
+                        <tbody id="settingsMatrixContainer">
+                            <!-- Matrix rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Settings Grid -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    
+                    <!-- 1. 기타 단가 (토목, 포장) -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                        <h4 class="text-sm font-bold text-slate-800 mb-3 border-b pb-2">기타 단가</h4>
+                        <div class="flex flex-col gap-3">
+                            <div>
+                                <label class="text-xs text-slate-500 font-medium">부대토목 (대지면적 기준)</label>
+                                <div class="flex items-center gap-1 mt-1">
+                                    <input type="text" id="setting_civil" oninput="formatInputWithComma(this); updateCivilRate(this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm">
+                                    <span class="text-xs text-slate-500 shrink-0 w-8">/<span class="unit-label">평</span></span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500 font-medium">포장공사 (대지면적-건축면적)</label>
+                                <div class="flex items-center gap-1 mt-1">
+                                    <input type="text" id="setting_paving" oninput="formatInputWithComma(this); updatePavingRate(this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm">
+                                    <span class="text-xs text-slate-500 shrink-0 w-8">/<span class="unit-label">평</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. 인테리어 및 냉난방 옵션 단가 -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-t-4 border-t-purple-500">
+                        <h4 class="text-sm font-bold text-slate-800 mb-3 border-b pb-2">옵션 단가 (실내 마감/설비)</h4>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-center gap-2">
+                                <label class="text-[11px] font-medium text-slate-700 w-16">기본마감</label>
+                                <input type="text" id="setting_int_basic" oninput="formatInputWithComma(this); updateOptionRate('interior', '기본마감', this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-purple-500 outline-none text-sm text-slate-700 font-medium">
+                                <span class="text-xs text-slate-400 shrink-0 w-5">/<span class="unit-label">평</span></span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-[11px] font-medium text-slate-700 w-16">중급마감</label>
+                                <input type="text" id="setting_int_premium" oninput="formatInputWithComma(this); updateOptionRate('interior', '중급마감', this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-purple-500 outline-none text-sm text-slate-700 font-medium">
+                                <span class="text-xs text-slate-400 shrink-0 w-5">/<span class="unit-label">평</span></span>
+                            </div>
+                            <div class="flex items-center gap-2 mt-1 pt-2 border-t border-slate-100">
+                                <label class="text-[11px] font-medium text-slate-700 w-16">에어컨</label>
+                                <input type="text" id="setting_hvac_ac" oninput="formatInputWithComma(this); updateOptionRate('hvac', '에어컨설치', this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-purple-500 outline-none text-sm text-slate-700 font-medium">
+                                <span class="text-xs text-slate-400 shrink-0 w-5">/<span class="unit-label">평</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. 데크 바닥 조성 단가 -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-t-4 border-t-blue-500">
+                        <div class="mb-3 border-b pb-2">
+                            <h4 class="text-sm font-bold text-slate-800">2층 이상 데크 단가</h4>
+                            <p class="text-[10px] text-blue-600 mt-0.5">※ 2층 이상 메인 철골/철콘 대신 적용</p>
+                        </div>
+                        <div class="space-y-3" id="deckRatesContainer">
+                            <!-- Deck inputs injected here -->
+                        </div>
+                    </div>
+
+                    <!-- 4. 제경비 및 이윤 -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-t-4 border-t-green-500">
+                        <div class="mb-3 border-b pb-2">
+                            <h4 class="text-sm font-bold text-slate-800">일반관리비 및 이윤</h4>
+                            <p class="text-[10px] text-green-600 mt-0.5">※ 순공사비 합계 대비 비율(%) 적용</p>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex items-center gap-2">
+                                <label class="text-xs font-medium text-slate-700 w-16">일반관리비</label>
+                                <input type="number" id="setting_admin" value="5" oninput="updatePercentageRate('admin', this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-green-500 outline-none text-sm text-slate-700 font-medium">
+                                <span class="text-xs text-slate-400 shrink-0 w-4">%</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-xs font-medium text-slate-700 w-16">이윤</label>
+                                <input type="number" id="setting_profit" value="5" oninput="updatePercentageRate('profit', this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-green-500 outline-none text-sm text-slate-700 font-medium">
+                                <span class="text-xs text-slate-400 shrink-0 w-4">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. 수직 증축 할증 상세 설정 -->
+                <div class="mt-4 bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-t-4 border-t-orange-500">
+                    <div class="mb-3 border-b pb-2 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-2">
+                        <h4 class="text-sm font-bold text-slate-800">수직 증축 할증 설정 (공종별)</h4>
+                        <p class="text-xs text-orange-600 font-medium">※ 설정된 시작 층수부터 1개층 추가 시 기본단가에 설정 비율(%)만큼 할증 추가 (- 입력 가능)</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left border-collapse min-w-[500px]">
+                            <thead class="bg-slate-50 text-slate-700">
+                                <tr>
+                                    <th class="p-2 border-b font-semibold w-1/3 text-center">공종</th>
+                                    <th class="p-2 border-b font-semibold w-1/3 text-center">할증 시작 층수 (F)</th>
+                                    <th class="p-2 border-b font-semibold w-1/3 text-center">할증률 (%) / 층당</th>
+                                </tr>
+                            </thead>
+                            <tbody id="surchargeTableBody">
+                                <!-- Surcharge rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t bg-white flex justify-end gap-3">
+                <button onclick="toggleSettingsModal()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-colors">
+                    적용 및 닫기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Constants & Global State ---
+        const PY_TO_M2 = 3.305785;
+        let currentUnit = 'py'; 
+        let numBuildings = 1;
+        
+        let buildingFloors = { 1: 1 };
+        let spaceIdCounter = 0; 
+        let costDebugLog = {};
+
+        // [DB 연동용] Matrix Base Coefficients (Internal M2 Rates)
+        const USAGE_KEYS = ['공장', '사무실', '소매점', '창고', '골프', '필로티'];
+        const CATEGORIES = [
+            '가설공사', '철근콘크리트공사', '철골공사', '판넬공사', 
+            '창호/유리공사', '미장/수장공사', '타일/방수공사', 
+            '도장공사', '전기공사', '설비공사'
+        ];
+
+        let BASE_MATRIX_M2 = {
+            '가설공사': { '공장': 52000, '사무실': 52000, '소매점': 52000, '창고': 52000, '골프': 52000, '필로티': 52000 },
+            '철근콘크리트공사': { '공장': 146973, '사무실': 146973, '소매점': 146973, '창고': 146973, '골프': 146973, '필로티': 146973 }, 
+            '철골공사': { '공장': 186447, '사무실': 186447, '소매점': 186447, '창고': 186447, '골프': 186447, '필로티': 186447 }, 
+            '판넬공사': { '공장': 158000, '사무실': 158000, '소매점': 142200, '창고': 158000, '골프': 158000, '필로티': 0 },
+            '창호/유리공사': { '공장': 55000, '사무실': 66000, '소매점': 77000, '창고': 55000, '골프': 55000, '필로티': 0 },
+            '미장/수장공사': { '공장': 32000, '사무실': 41600, '소매점': 41600, '창고': 16000, '골프': 32000, '필로티': 16000 },
+            '타일/방수공사': { '공장': 24000, '사무실': 24000, '소매점': 24000, '창고': 24000, '골프': 24000, '필로티': 0 },
+            '도장공사': { '공장': 18000, '사무실': 18000, '소매점': 18000, '창고': 18000, '골프': 18000, '필로티': 0 },
+            '전기공사': { '공장': 74400, '사무실': 68200, '소매점': 62000, '창고': 62000, '골프': 62000, '필로티': 62000 },
+            '설비공사': { '공장': 45000, '사무실': 54000, '소매점': 45000, '창고': 27000, '골프': 67500, '필로티': 0 }
+        };
+
+        let CIVIL_WORK_RATE_M2 = 43824; // 평당 144,873원 
+        let PAVING_WORK_RATE_M2 = 35188; // 평당 116,324원 
+
+        // 옵션 단가 (인테리어, 냉난방)
+        let EXTRA_OPTIONS_M2 = {
+            '기본마감': 105875, // 평당 350,000원
+            '중급마감': 151250, // 평당 500,000원
+            '에어컨설치': 60500  // 평당 200,000원
+        };
+
+        // [DB 연동용] 2층 이상 데크 바닥 전용 단가 (Internal M2 Rates)
+        let DECK_RATES_M2 = {
+            '철골공사': 60500,         
+            '철근콘크리트공사': 45300  
+        };
+
+        // [DB 연동용] 제경비 및 이윤 (%)
+        let ADMIN_EXPENSE_RATE = 5; 
+        let PROFIT_RATE = 5;
+
+        // [DB 연동용] 수직 증축 할증 상세 설정
+        let FLOOR_SURCHARGE_SETTINGS = {
+            '가설공사': { startFloor: 2, rate: 20 },
+            '철근콘크리트공사': { startFloor: 2, rate: 0 },
+            '철골공사': { startFloor: 2, rate: 15 },
+            '판넬공사': { startFloor: 3, rate: 20 },
+            '창호/유리공사': { startFloor: 2, rate: 0 },
+            '미장/수장공사': { startFloor: 2, rate: 0 },
+            '타일/방수공사': { startFloor: 2, rate: 0 },
+            '도장공사': { startFloor: 2, rate: 0 },
+            '전기공사': { startFloor: 2, rate: 0 },
+            '설비공사': { startFloor: 2, rate: 0 }
+        };
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            updateUnitButtonsUI();
+            renderBuildings();
+            renderSettingsMatrix(); 
+        });
+
+        // --- Unit Toggle Logic ---
+        function setUnit(unit) {
+            if (currentUnit === unit) return;
+            
+            const multiplier = unit === 'm2' ? PY_TO_M2 : (1 / PY_TO_M2);
+            
+            const siteAreaInput = document.getElementById('siteArea');
+            if(siteAreaInput.value) siteAreaInput.value = (parseFloat(siteAreaInput.value) * multiplier).toFixed(1);
+
+            document.querySelectorAll('.area-input').forEach(input => {
+                if(input.value) input.value = (parseFloat(input.value) * multiplier).toFixed(1);
+            });
+
+            currentUnit = unit;
+            
+            updateUnitButtonsUI();
+            document.querySelectorAll('.unit-label').forEach(el => el.textContent = unit === 'm2' ? '㎡' : '평');
+            document.querySelectorAll('.unit-text-ko').forEach(el => el.textContent = unit === 'm2' ? '㎡당' : '평당');
+            
+            for(let i = 1; i <= numBuildings; i++) updateTotalBuildingArea(i);
+            
+            renderSettingsMatrix(); 
+            triggerRecalculate();
+        }
+
+        function updateUnitButtonsUI() {
+            document.getElementById('btnM2').className = currentUnit === 'm2' 
+                ? 'px-4 py-2 text-sm font-medium rounded-md bg-blue-50 text-blue-700 transition-colors' 
+                : 'px-4 py-2 text-sm font-medium rounded-md text-slate-500 hover:text-slate-700 transition-colors';
+            
+            document.getElementById('btnPy').className = currentUnit === 'py' 
+                ? 'px-4 py-2 text-sm font-medium rounded-md bg-blue-50 text-blue-700 transition-colors' 
+                : 'px-4 py-2 text-sm font-medium rounded-md text-slate-500 hover:text-slate-700 transition-colors';
+        }
+
+        // --- Dynamic Building UI Logic ---
+        function changeBuildingCount(delta) {
+            const newVal = numBuildings + delta;
+            if (newVal >= 1 && newVal <= 5) {
+                numBuildings = newVal;
+                document.getElementById('buildingCount').value = numBuildings;
+                if(!buildingFloors[numBuildings]) buildingFloors[numBuildings] = 1;
+                renderBuildings();
+            }
+        }
+
+        function renderBuildings() {
+            const container = document.getElementById('buildingsContainer');
+            
+            for(let i = 1; i <= numBuildings; i++) {
+                if(!document.getElementById(`building_wrapper_${i}`)) {
+                    const html = `
+                        <div id="building_wrapper_${i}" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 fade-in">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 pb-3 border-b border-slate-100">
+                                <h3 class="text-lg font-bold text-slate-800 border-l-4 border-blue-500 pl-3">${i}동 건축 개요</h3>
+                                <div class="mt-2 sm:mt-0 flex items-center bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
+                                    <span class="text-sm text-slate-500 mr-2">지상 층수</span>
+                                    <div class="flex items-center">
+                                        <button onclick="changeFloorCount(${i}, -1)" class="w-8 h-8 flex items-center justify-center bg-white border border-slate-300 rounded-l hover:bg-slate-100 font-bold">-</button>
+                                        <input type="number" id="floors_${i}" readonly class="w-12 text-center border-y border-slate-300 h-8 focus:outline-none bg-white text-sm font-medium" value="${buildingFloors[i]}">
+                                        <button onclick="changeFloorCount(${i}, 1)" class="w-8 h-8 flex items-center justify-center bg-white border border-slate-300 rounded-r hover:bg-slate-100 font-bold">+</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="floors_container_${i}" class="space-y-4"></div>
+
+                            <div class="mt-4 pt-4 border-t border-slate-200 flex justify-end items-center">
+                                <span class="text-sm font-medium text-slate-600 mr-3">${i}동 총 면적 합계:</span>
+                                <span class="text-2xl font-bold text-blue-600" id="total_area_${i}">0</span>
+                                <span class="text-sm text-slate-500 ml-1 unit-label">${currentUnit === 'm2' ? '㎡' : '평'}</span>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
+                    renderFloorRows(i);
+                }
+            }
+
+            Array.from(container.children).forEach(child => {
+                const idNum = parseInt(child.id.split('_')[2]);
+                if(idNum > numBuildings) {
+                    delete buildingFloors[idNum];
+                    child.remove();
+                }
+            });
+            
+            triggerRecalculate();
+        }
+
+        function changeFloorCount(buildingId, delta) {
+            const current = buildingFloors[buildingId];
+            const newVal = current + delta;
+            if (newVal >= 1 && newVal <= 10) { 
+                buildingFloors[buildingId] = newVal;
+                document.getElementById(`floors_${buildingId}`).value = newVal;
+                renderFloorRows(buildingId);
+                triggerRecalculate();
+            }
+        }
+
+        function renderFloorRows(buildingId) {
+            const container = document.getElementById(`floors_container_${buildingId}`);
+            const numFloors = buildingFloors[buildingId];
+            
+            for(let j = 1; j <= numFloors; j++) {
+                if(!document.getElementById(`floor_wrapper_${buildingId}_${j}`)) {
+                    const html = `
+                        <div id="floor_wrapper_${buildingId}_${j}" class="bg-slate-50 p-3 sm:p-4 rounded-lg border border-slate-200 fade-in">
+                            <div class="flex justify-between items-center border-b border-slate-200 pb-2 mb-3">
+                                <span class="font-bold text-slate-700 bg-white px-3 py-1 rounded shadow-sm">${j}F</span>
+                                <button onclick="addSpace(${buildingId}, ${j})" class="text-sm text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded transition-colors">
+                                    + 용도/공간 추가
+                                </button>
+                            </div>
+                            <div id="space_container_${buildingId}_${j}" class="space-y-3"></div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
+                    
+                    const defaultArea = j === 1 ? '100' : ''; 
+                    addSpace(buildingId, j, defaultArea);
+                }
+            }
+
+            Array.from(container.children).forEach(child => {
+                const floorNum = parseInt(child.id.split('_')[3]);
+                if(floorNum > numFloors) child.remove();
+            });
+
+            updateTotalBuildingArea(buildingId);
+        }
+
+        function addSpace(buildingId, floorId, defaultArea = '') {
+            spaceIdCounter++;
+            const container = document.getElementById(`space_container_${buildingId}_${floorId}`);
+            
+            const html = `
+                <div id="space_row_${spaceIdCounter}" class="space-row bg-white p-3 rounded-lg border border-slate-200 fade-in flex flex-col gap-2 relative shadow-sm">
+                    <button onclick="removeSpace(${spaceIdCounter}, ${buildingId})" class="absolute top-2 right-2 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 p-1 rounded transition-colors" title="삭제">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                    
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pr-8 w-full">
+                        <div>
+                            <label class="text-[11px] text-slate-500 font-bold block mb-1">건축 용도</label>
+                            <select class="usage-select w-full rounded border-slate-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" onchange="triggerRecalculate()">
+                                <option value="공장">공장</option>
+                                <option value="사무실">사무실</option>
+                                <option value="소매점">소매점</option>
+                                <option value="창고">창고</option>
+                                <option value="골프">골프/체육</option>
+                                <option value="필로티" class="font-semibold text-blue-600">필로티</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-slate-500 font-bold block mb-1">면적</label>
+                            <div class="relative">
+                                <input type="number" class="area-input w-full rounded border-slate-300 px-2 py-1.5 text-sm text-right pr-7 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="면적" value="${defaultArea}" oninput="updateTotalBuildingArea(${buildingId})">
+                                <span class="absolute right-2 top-1.5 text-slate-400 text-xs unit-label">${currentUnit === 'm2' ? '㎡' : '평'}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-purple-500 font-bold block mb-1">내부 인테리어</label>
+                            <select class="interior-select w-full rounded border-slate-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" onchange="triggerRecalculate()">
+                                <option value="없음">없음</option>
+                                <option value="기본마감">기본마감</option>
+                                <option value="중급마감">중급마감</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-purple-500 font-bold block mb-1">냉난방설비</label>
+                            <select class="hvac-select w-full rounded border-slate-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" onchange="triggerRecalculate()">
+                                <option value="없음">없음</option>
+                                <option value="에어컨설치">에어컨설치</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+            triggerRecalculate();
+        }
+
+        function removeSpace(spaceId, buildingId) {
+            document.getElementById(`space_row_${spaceId}`).remove();
+            updateTotalBuildingArea(buildingId);
+        }
+
+        function updateTotalBuildingArea(buildingId) {
+            let sum = 0;
+            const areaInputs = document.querySelectorAll(`#building_wrapper_${buildingId} .area-input`);
+            
+            areaInputs.forEach(input => {
+                if(input.value) sum += parseFloat(input.value);
+            });
+            
+            document.getElementById(`total_area_${buildingId}`).innerText = sum.toLocaleString('ko-KR', {maximumFractionDigits: 1});
+            triggerRecalculate();
+        }
+
+        function triggerRecalculate() {
+            if (!document.getElementById('resultSection').classList.contains('hidden')) {
+                calculateCost();
+            }
+        }
+
+        // --- Setting Matrix (DB Grid Logic) ---
+        function toggleSettingsModal() {
+            const modal = document.getElementById('settingsModal');
+            if (modal.classList.contains('hidden')) {
+                renderSettingsMatrix(); 
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function renderSettingsMatrix() {
+            const tbody = document.getElementById('settingsMatrixContainer');
+            tbody.innerHTML = '';
+            const multiplier = currentUnit === 'py' ? PY_TO_M2 : 1;
+
+            CATEGORIES.forEach(category => {
+                let tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-slate-50 transition-colors";
+                
+                // Category Header Column
+                let th = document.createElement('th');
+                th.className = "p-3 font-medium text-slate-800 bg-white sticky left-0 border-r shadow-[1px_0_0_0_#e2e8f0]";
+                th.innerText = category;
+                tr.appendChild(th);
+
+                // Usage Input Columns
+                USAGE_KEYS.forEach(usage => {
+                    let td = document.createElement('td');
+                    td.className = "p-2 min-w-[100px]";
+                    
+                    let rawValue = BASE_MATRIX_M2[category][usage];
+                    let displayValue = Math.round(rawValue * multiplier);
+
+                    const usageKeyMap = {'골프/체육': '골프'};
+                    const mappedUsage = usageKeyMap[usage] || usage;
+
+                    td.innerHTML = `
+                        <input type="text" 
+                            value="${displayValue.toLocaleString('ko-KR')}" 
+                            oninput="formatInputWithComma(this); updateMatrixRate('${category}', '${mappedUsage}', this.value)"
+                            class="w-full text-right rounded-md border-slate-200 border px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 bg-white shadow-sm font-mono text-sm">
+                    `;
+                    tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+            });
+
+            // Update separate inputs
+            document.getElementById('setting_civil').value = Math.round(CIVIL_WORK_RATE_M2 * multiplier).toLocaleString('ko-KR');
+            document.getElementById('setting_paving').value = Math.round(PAVING_WORK_RATE_M2 * multiplier).toLocaleString('ko-KR');
+
+            document.getElementById('setting_int_basic').value = Math.round(EXTRA_OPTIONS_M2['기본마감'] * multiplier).toLocaleString('ko-KR');
+            document.getElementById('setting_int_premium').value = Math.round(EXTRA_OPTIONS_M2['중급마감'] * multiplier).toLocaleString('ko-KR');
+            document.getElementById('setting_hvac_ac').value = Math.round(EXTRA_OPTIONS_M2['에어컨설치'] * multiplier).toLocaleString('ko-KR');
+
+            const adminInput = document.getElementById('setting_admin');
+            if(adminInput) adminInput.value = ADMIN_EXPENSE_RATE;
+            
+            const profitInput = document.getElementById('setting_profit');
+            if(profitInput) profitInput.value = PROFIT_RATE;
+
+            // Render Deck Rates
+            const deckContainer = document.getElementById('deckRatesContainer');
+            deckContainer.innerHTML = '';
+            Object.keys(DECK_RATES_M2).forEach(category => {
+                const val = Math.round(DECK_RATES_M2[category] * multiplier);
+                const label = category === '철골공사' ? '데크 철골/플' : '데크 철근콘';
+                deckContainer.innerHTML += `
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-medium text-slate-700 w-20">${label}</label>
+                        <input type="text" value="${val.toLocaleString('ko-KR')}" oninput="formatInputWithComma(this); updateDeckRate('${category}', this.value)" class="w-full text-right rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none text-sm text-slate-700 font-medium">
+                        <span class="text-xs text-slate-400 shrink-0 w-5">/<span class="unit-label">${currentUnit === 'm2' ? '㎡' : '평'}</span></span>
+                    </div>
+                `;
+            });
+
+            // Render Surcharge Settings Table
+            const surchargeBody = document.getElementById('surchargeTableBody');
+            surchargeBody.innerHTML = '';
+            CATEGORIES.forEach(category => {
+                const setting = FLOOR_SURCHARGE_SETTINGS[category];
+                surchargeBody.innerHTML += `
+                    <tr class="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                        <td class="p-2 font-medium text-slate-700 text-center border-r border-slate-100">${category}</td>
+                        <td class="p-2 border-r border-slate-100">
+                            <div class="flex justify-center items-center gap-2">
+                                <input type="number" value="${setting.startFloor}" min="2" oninput="updateSurchargeSetting('${category}', 'startFloor', this.value)" class="w-16 text-center rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-orange-500 outline-none font-medium text-slate-700 bg-white shadow-sm">
+                                <span class="text-xs text-slate-400">F 부터</span>
+                            </div>
+                        </td>
+                        <td class="p-2">
+                            <div class="flex justify-center items-center gap-2">
+                                <input type="number" value="${setting.rate}" oninput="updateSurchargeSetting('${category}', 'rate', this.value)" class="w-20 text-right rounded-md border-slate-300 border px-2 py-1 focus:ring-2 focus:ring-orange-500 outline-none font-medium text-slate-700 bg-white shadow-sm">
+                                <span class="text-xs text-slate-400">%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        // --- Utils for Comma Input Formatting ---
+        function formatInputWithComma(input) {
+            let val = input.value.replace(/[^0-9-]/g, ''); 
+            if (val === '' || val === '-') {
+                input.value = val;
+                return;
+            }
+            let num = parseInt(val, 10);
+            input.value = num.toLocaleString('ko-KR');
+        }
+
+        function unformatComma(str) {
+            return parseFloat(str.toString().replace(/,/g, '')) || 0;
+        }
+
+        // --- Data Updaters ---
+        function updateMatrixRate(category, usage, displayValueStr) {
+            const displayValue = unformatComma(displayValueStr);
+            const internalValueM2 = currentUnit === 'py' ? (displayValue / PY_TO_M2) : displayValue;
+            BASE_MATRIX_M2[category][usage] = internalValueM2;
+            triggerRecalculate();
+        }
+
+        function updateCivilRate(displayValueStr) {
+            const displayValue = unformatComma(displayValueStr);
+            CIVIL_WORK_RATE_M2 = currentUnit === 'py' ? (displayValue / PY_TO_M2) : displayValue;
+            triggerRecalculate();
+        }
+
+        function updatePavingRate(displayValueStr) {
+            const displayValue = unformatComma(displayValueStr);
+            PAVING_WORK_RATE_M2 = currentUnit === 'py' ? (displayValue / PY_TO_M2) : displayValue;
+            triggerRecalculate();
+        }
+
+        function updateOptionRate(type, key, displayValueStr) {
+            const displayValue = unformatComma(displayValueStr);
+            EXTRA_OPTIONS_M2[key] = currentUnit === 'py' ? (displayValue / PY_TO_M2) : displayValue;
+            triggerRecalculate();
+        }
+
+        function updateDeckRate(category, displayValueStr) {
+            const displayValue = unformatComma(displayValueStr);
+            DECK_RATES_M2[category] = currentUnit === 'py' ? (displayValue / PY_TO_M2) : displayValue;
+            triggerRecalculate();
+        }
+
+        function updatePercentageRate(type, valueStr) {
+            const val = parseFloat(valueStr) || 0;
+            if (type === 'admin') ADMIN_EXPENSE_RATE = val;
+            if (type === 'profit') PROFIT_RATE = val;
+            triggerRecalculate();
+        }
+
+        function updateSurchargeSetting(category, field, valueStr) {
+            const val = parseFloat(valueStr) || 0;
+            if (field === 'startFloor') {
+                FLOOR_SURCHARGE_SETTINGS[category].startFloor = Math.max(2, Math.round(val)); 
+            } else {
+                FLOOR_SURCHARGE_SETTINGS[category].rate = val;
+            }
+            triggerRecalculate();
+        }
+
+        // --- Core Calculation Engine ---
+        function calculateCost() {
+            let totalCost = 0;
+            let totalM2Area = 0; 
+            let totalFootprintAreaM2 = 0; // 1층 바닥면적(건축면적) 합계
+            let costBreakdown = {};
+            costDebugLog = {};
+
+            CATEGORIES.forEach(key => {
+                costBreakdown[key] = 0;
+                costDebugLog[key] = [];
+            });
+            
+            const extraCategories = ['부대토목/기타', '포장공사', '일반관리비', '이윤'];
+            extraCategories.forEach(key => {
+                costBreakdown[key] = 0;
+                costDebugLog[key] = [];
+            });
+
+            const unitStr = currentUnit === 'py' ? '평' : '㎡';
+            const multiplier = currentUnit === 'py' ? PY_TO_M2 : 1;
+
+            // 1. Site Area Calculation
+            let siteArea = parseFloat(document.getElementById('siteArea').value) || 0;
+            let siteAreaM2 = currentUnit === 'py' ? (siteArea * PY_TO_M2) : siteArea; 
+            
+            const civilCost = siteAreaM2 * CIVIL_WORK_RATE_M2;
+            costBreakdown['부대토목/기타'] += civilCost;
+            totalCost += civilCost;
+            
+            if (civilCost > 0) {
+                costDebugLog['부대토목/기타'].push(`
+                    <div class="mb-2 pb-2 border-b border-slate-100 last:border-0">
+                        <span class="font-bold text-blue-700">[부대토목] 대지면적</span> ${siteArea}${unitStr} × 단가(${formatCurrency(CIVIL_WORK_RATE_M2 * multiplier)}) 
+                        <br> = <span class="font-bold text-slate-900">${formatCurrency(civilCost)}</span>
+                    </div>
+                `);
+            }
+
+            // 2. Per Building, Per Floor, Per Space Calculation
+            for(let i = 1; i <= numBuildings; i++) {
+                const floors = buildingFloors[i];
+                
+                for(let j = 1; j <= floors; j++) {
+                    const spaceRows = document.querySelectorAll(`#space_container_${i}_${j} .space-row`);
+                    
+                    spaceRows.forEach(row => {
+                        let usage = row.querySelector('.usage-select').value;
+                        if(usage === '골프/체육') usage = '골프'; 
+                        
+                        let interiorOpt = row.querySelector('.interior-select').value;
+                        let hvacOpt = row.querySelector('.hvac-select').value;
+
+                        let floorArea = parseFloat(row.querySelector('.area-input').value) || 0;
+                        if (floorArea === 0) return; 
+
+                        let floorAreaM2 = currentUnit === 'py' ? (floorArea * PY_TO_M2) : floorArea;
+                        totalM2Area += floorAreaM2;
+
+                        // 1층일 경우 건축면적 합계에 누적 (포장공사용)
+                        if (j === 1) {
+                            totalFootprintAreaM2 += floorAreaM2;
+                        }
+
+                        // A. 기본 건축 공종 계산
+                        CATEGORIES.forEach(category => {
+                            let baseRateM2 = BASE_MATRIX_M2[category][usage] || 0;
+                            let actualRateM2 = 0;
+                            let formulaDetails = "";
+
+                            if (j === 1) {
+                                actualRateM2 = baseRateM2;
+                                formulaDetails = `기본단가 ${formatCurrency(baseRateM2 * multiplier)}`;
+                            } else {
+                                if (category === '철골공사' || category === '철근콘크리트공사') {
+                                    actualRateM2 = DECK_RATES_M2[category];
+                                    formulaDetails = `데크단가 ${formatCurrency(actualRateM2 * multiplier)}`;
+                                } else if (category === '판넬공사' || category === '가설공사') {
+                                    actualRateM2 = 0;
+                                    formulaDetails = `단가 0원 (2층 이상 제외)`;
+                                } else {
+                                    actualRateM2 = baseRateM2;
+                                    formulaDetails = `기본단가 ${formatCurrency(baseRateM2 * multiplier)}`;
+                                }
+
+                                const surchargeSetting = FLOOR_SURCHARGE_SETTINGS[category];
+                                if (surchargeSetting && j >= surchargeSetting.startFloor && surchargeSetting.rate !== 0) {
+                                    const surchargeDecimal = surchargeSetting.rate / 100;
+                                    const extraVerticalCost = baseRateM2 * surchargeDecimal * (j - surchargeSetting.startFloor + 1);
+                                    actualRateM2 += extraVerticalCost;
+                                    
+                                    const sign = extraVerticalCost >= 0 ? '+' : '';
+                                    formulaDetails += ` ${sign} 수직할증 ${formatCurrency(extraVerticalCost * multiplier)}`;
+                                }
+                            }
+
+                            const categoryCost = floorAreaM2 * actualRateM2;
+                            if (categoryCost !== 0) {
+                                costBreakdown[category] += categoryCost;
+                                totalCost += categoryCost;
+                                costDebugLog[category].push(`
+                                    <div class="mb-2 pb-2 border-b border-slate-100 last:border-0">
+                                        <span class="font-bold text-blue-700">[${i}동 ${j}F ${usage}]</span> ${floorArea}${unitStr} × (${formulaDetails}) 
+                                        <br> = <span class="font-bold text-slate-900">${formatCurrency(categoryCost)}</span>
+                                    </div>
+                                `);
+                            }
+                        });
+
+                        // B. 내부 인테리어 추가 계산 (미장/수장공사에 병합)
+                        if (interiorOpt !== '없음') {
+                            const intRateM2 = EXTRA_OPTIONS_M2[interiorOpt] || 0;
+                            const intCost = floorAreaM2 * intRateM2;
+                            if (intCost > 0) {
+                                costBreakdown['미장/수장공사'] += intCost;
+                                totalCost += intCost;
+                                costDebugLog['미장/수장공사'].push(`
+                                    <div class="mb-2 pb-2 border-b border-slate-100 last:border-0 bg-purple-50 p-2 rounded">
+                                        <span class="font-bold text-purple-700">[${i}동 ${j}F 옵션]</span> 인테리어(${interiorOpt}) ${floorArea}${unitStr} × 단가(${formatCurrency(intRateM2 * multiplier)}) 
+                                        <br> = <span class="font-bold text-slate-900">${formatCurrency(intCost)}</span>
+                                    </div>
+                                `);
+                            }
+                        }
+
+                        // C. 냉난방 설비 추가 계산 (설비공사에 병합)
+                        if (hvacOpt !== '없음') {
+                            const hvacRateM2 = EXTRA_OPTIONS_M2[hvacOpt] || 0;
+                            const hvacCost = floorAreaM2 * hvacRateM2;
+                            if (hvacCost > 0) {
+                                costBreakdown['설비공사'] += hvacCost;
+                                totalCost += hvacCost;
+                                costDebugLog['설비공사'].push(`
+                                    <div class="mb-2 pb-2 border-b border-slate-100 last:border-0 bg-purple-50 p-2 rounded">
+                                        <span class="font-bold text-purple-700">[${i}동 ${j}F 옵션]</span> 냉난방(${hvacOpt}) ${floorArea}${unitStr} × 단가(${formatCurrency(hvacRateM2 * multiplier)}) 
+                                        <br> = <span class="font-bold text-slate-900">${formatCurrency(hvacCost)}</span>
+                                    </div>
+                                `);
+                            }
+                        }
+                    });
+                }
+            }
+
+            // 3. Paving Work (포장공사: 대지면적 - 건축면적 합계)
+            let pavingAreaM2 = Math.max(0, siteAreaM2 - totalFootprintAreaM2);
+            let pavingCost = pavingAreaM2 * PAVING_WORK_RATE_M2;
+            
+            if (pavingCost > 0) {
+                costBreakdown['포장공사'] = pavingCost;
+                totalCost += pavingCost;
+                let siteAreaPy = Math.round(siteAreaM2 * multiplier);
+                let footAreaPy = Math.round(totalFootprintAreaM2 * multiplier);
+                let pavingAreaPy = Math.round(pavingAreaM2 * multiplier);
+                
+                costDebugLog['포장공사'].push(`
+                    <div class="mb-2 pb-2 border-b border-slate-100 last:border-0">
+                        <div class="text-xs text-slate-500 mb-1">대지면적(${siteAreaPy}${unitStr}) - 건축면적(${footAreaPy}${unitStr}) = 포장면적(${pavingAreaPy}${unitStr})</div>
+                        <span class="font-bold text-blue-700">[포장공사]</span> ${pavingAreaPy}${unitStr} × 단가(${formatCurrency(PAVING_WORK_RATE_M2 * multiplier)}) 
+                        <br> = <span class="font-bold text-slate-900">${formatCurrency(pavingCost)}</span>
+                    </div>
+                `);
+            }
+
+            // 4. Calculate Indirect Costs (Admin & Profit)
+            let subTotalCost = totalCost; // 순공사비 합계
+
+            if (ADMIN_EXPENSE_RATE > 0) {
+                const adminCost = subTotalCost * (ADMIN_EXPENSE_RATE / 100);
+                costBreakdown['일반관리비'] = adminCost;
+                totalCost += adminCost;
+                costDebugLog['일반관리비'].push(`
+                    <div class="mb-2 pb-2 border-b border-slate-100 last:border-0">
+                        <span class="font-bold text-green-700">[순공사비 합계]</span> ${formatCurrency(subTotalCost)} × ${ADMIN_EXPENSE_RATE}% 
+                        <br> = <span class="font-bold text-slate-900">${formatCurrency(adminCost)}</span>
+                    </div>
+                `);
+            }
+
+            if (PROFIT_RATE > 0) {
+                const profitCost = subTotalCost * (PROFIT_RATE / 100); 
+                costBreakdown['이윤'] = profitCost;
+                totalCost += profitCost;
+                costDebugLog['이윤'].push(`
+                    <div class="mb-2 pb-2 border-b border-slate-100 last:border-0">
+                        <span class="font-bold text-green-700">[순공사비 합계]</span> ${formatCurrency(subTotalCost)} × ${PROFIT_RATE}% 
+                        <br> = <span class="font-bold text-slate-900">${formatCurrency(profitCost)}</span>
+                    </div>
+                `);
+            }
+
+            // 5. Render Results
+            const resultSection = document.getElementById('resultSection');
+            resultSection.classList.remove('hidden');
+            
+            document.getElementById('totalCostDisplay').innerText = formatCurrency(totalCost);
+            
+            const totalPyArea = totalM2Area / PY_TO_M2;
+            const costPerPy = totalPyArea > 0 ? (totalCost / totalPyArea) : 0;
+            document.getElementById('pyeongCostDisplay').innerText = formatCurrency(costPerPy) + ' / 평';
+
+            const breakdownContainer = document.getElementById('breakdownContainer');
+            breakdownContainer.innerHTML = '';
+            
+            const sortedBreakdown = Object.entries(costBreakdown).sort((a, b) => b[1] - a[1]);
+            const maxCost = sortedBreakdown[0][1] || 1; 
+
+            sortedBreakdown.forEach(([category, cost]) => {
+                if(cost === 0) return;
+                const percentage = (cost / maxCost) * 100;
+                const costRatio = ((cost / totalCost) * 100).toFixed(1);
+                
+                let bgColor = 'bg-blue-500';
+                if(category === '포장공사') bgColor = 'bg-cyan-500';
+                if(category === '일반관리비' || category === '이윤') bgColor = 'bg-green-500';
+
+                const html = `
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors" 
+                         ondblclick="showDebugModal('${category}')" title="더블클릭하여 산출 근거 확인">
+                        <div class="w-full sm:w-32 font-medium text-slate-700 shrink-0 flex items-center justify-between">
+                            ${category}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <div class="flex-grow flex items-center gap-3">
+                            <div class="h-2.5 bg-slate-200 rounded-full w-full overflow-hidden shadow-inner">
+                                <div class="h-full ${bgColor} rounded-full" style="width: ${percentage}%"></div>
+                            </div>
+                            <div class="w-24 text-right font-semibold text-slate-800 shrink-0">${formatCurrency(cost, true)}</div>
+                            <div class="w-12 text-right text-xs text-slate-400 shrink-0">${costRatio}%</div>
+                        </div>
+                    </div>
+                `;
+                breakdownContainer.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // --- Debug Modal Logic ---
+        function showDebugModal(category) {
+            document.getElementById('debugModalTitle').innerText = `${category} 산출 근거`;
+            
+            const logArray = costDebugLog[category] || [];
+            const contentDiv = document.getElementById('debugModalContent');
+            
+            if (logArray.length === 0) {
+                contentDiv.innerHTML = '<p class="text-slate-500 text-center py-4">해당 항목의 산출 내역이 없습니다.</p>';
+            } else {
+                contentDiv.innerHTML = logArray.join('');
+            }
+            
+            document.getElementById('debugModal').classList.remove('hidden');
+        }
+
+        function closeDebugModal() {
+            document.getElementById('debugModal').classList.add('hidden');
+        }
+
+        // --- Utils ---
+        function formatCurrency(num, shorten = false) {
+            if(shorten) {
+                return (num / 10000).toLocaleString('ko-KR', {maximumFractionDigits: 0}) + '만';
+            }
+            return num.toLocaleString('ko-KR', {maximumFractionDigits: 0}) + ' 원';
+        }
+    </script>
+</body>
+</html>

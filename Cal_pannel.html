@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>판넬계산기</title>
+    <!-- Tailwind CSS 연동 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons 연동 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* 커스텀 스크롤바 등 필요시 추가용, 현재는 Tailwind 유틸리티 사용 */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .fade-in { animation: fadeIn 0.2s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50 p-6 text-sm relative">
+
+    <div class="max-w-[1400px] mx-auto space-y-6">
+        <!-- 헤더 -->
+        <header class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+            <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <i data-lucide="calculator" class="w-7 h-7 text-blue-600"></i>
+                판넬계산기
+                <button onclick="openManualModal()" class="ml-2 text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 p-1.5 rounded-full transition-colors flex items-center justify-center shadow-sm border border-gray-200" title="사용 매뉴얼 보기">
+                    <i data-lucide="book-open" class="w-5 h-5"></i>
+                </button>
+            </h1>
+            <div class="flex gap-2 flex-wrap">
+                <input type="file" id="fileInput" accept=".json" class="hidden" onchange="handleImportJSON(event)" />
+                <button onclick="document.getElementById('fileInput').click()" class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 text-gray-700 font-medium transition">
+                    <i data-lucide="upload" class="w-4 h-4"></i> JSON 열기
+                </button>
+                <button onclick="handleExportJSON()" class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 text-gray-700 font-medium transition">
+                    <i data-lucide="download" class="w-4 h-4"></i> JSON 저장
+                </button>
+                <button onclick="handleExportCSV()" class="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium shadow transition">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel 출력
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 1. 기본 설정 (변수) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                    <i data-lucide="settings" class="w-5 h-5 text-gray-500"></i>
+                    1. 기본정보 설정
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-600 mb-1 font-medium">공사명</label>
+                        <input type="text" id="projectName" oninput="updateBasicInfo('projectName', this.value)" class="w-full border rounded p-2 bg-gray-50 focus:bg-white" placeholder="예: 00공장 신축공사" />
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-gray-600 mb-1 font-medium">처마높이</label>
+                            <div class="flex items-center gap-1">
+                                <input type="number" id="vH1" oninput="updateBasicInfo('vH1', this.value)" class="w-full border rounded p-2 text-right bg-gray-50 focus:bg-white" />
+                                <span class="text-gray-500 text-xs">mm</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-600 mb-1 font-medium">최고높이</label>
+                            <div class="flex items-center gap-1">
+                                <input type="number" id="vH2" oninput="updateBasicInfo('vH2', this.value)" class="w-full border rounded p-2 text-right bg-gray-50 focus:bg-white" />
+                                <span class="text-gray-500 text-xs">mm</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pt-2">
+                        <label class="block text-blue-800 mb-1 font-bold">전체 로스율 (Loss)</label>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="lossRate" oninput="updateBasicInfo('lossRate', this.value)" value="5" class="w-full border-2 border-blue-200 rounded p-2 text-right bg-blue-50 focus:bg-white font-bold text-blue-900" />
+                            <span class="text-blue-800 font-bold">%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 제외 창호 LIST 설정 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:col-span-2">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                    <i data-lucide="layout-list" class="w-5 h-5 text-gray-500"></i>
+                    2. 제외 창호 사전 등록 DB
+                </h2>
+                
+                <div class="flex gap-2 mb-4 bg-gray-50 p-2 rounded border border-gray-100">
+                    <input type="text" id="newWinName" placeholder="창호명칭 (예: PL1)" class="flex-1 border rounded p-2 text-sm" />
+                    <div class="flex-1 flex items-center gap-2">
+                        <input type="number" id="newWinArea" placeholder="면적(m²)" class="w-full border rounded p-2 text-right text-sm" />
+                    </div>
+                    <button onclick="addWindow()" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-700 flex items-center gap-1 font-medium shadow-sm transition">
+                        <i data-lucide="plus" class="w-4 h-4"></i> 추가
+                    </button>
+                </div>
+
+                <div class="max-h-36 overflow-y-auto border rounded border-gray-200">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-gray-100 sticky top-0 text-[13px] text-gray-600">
+                            <tr>
+                                <th class="p-2 border-b w-1/2 font-medium">창호명칭</th>
+                                <th class="p-2 border-b w-1/3 text-right font-medium">개당 제외면적(m²)</th>
+                                <th class="p-2 border-b w-1/6 text-center font-medium">관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="windowsTableBody" class="text-[13px]">
+                            <!-- JS 랜더링 영역 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 판넬 산출 리스트 입력 및 결과 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="bg-slate-50 p-5 border-b border-gray-200">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <i data-lucide="calculator" class="w-5 h-5 text-blue-600"></i>
+                    3. 산출 리스트 입력
+                </h2>
+                
+                <!-- 입력 폼 영역 -->
+                <div id="mainFormArea"></div>
+
+                <div class="mt-5 grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-800 p-4 rounded-xl shadow-inner text-white items-center">
+                    <div class="text-center border-b md:border-b-0 md:border-r border-slate-600 pb-2 md:pb-0">
+                        <div class="text-xs text-slate-400 mb-1">단순산출 미리보기</div>
+                        <div class="text-lg font-mono"><span id="previewSimple">0.00</span> <span class="text-xs">m²</span></div>
+                    </div>
+                    <div class="text-center border-b md:border-b-0 md:border-r border-slate-600 pb-2 md:pb-0">
+                        <div class="text-xs text-slate-400 mb-1">최종면적 미리보기</div>
+                        <div class="text-xl font-bold font-mono text-blue-300">
+                            <span id="previewFinal">0.00</span> <span class="text-xs">m²</span>
+                        </div>
+                    </div>
+                    <div class="text-center pb-2 md:pb-0">
+                        <div class="text-xs text-yellow-400 font-semibold mb-1">로스(<span id="previewLossRate">5</span>%) 적용시</div>
+                        <div class="text-xl font-bold font-mono text-yellow-400">
+                            <span id="previewLoss">0.00</span> <span class="text-xs">m²</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button onclick="addCalcItem()" class="bg-blue-600 w-full md:w-auto px-6 py-3 rounded-lg shadow-lg hover:bg-blue-500 hover:-translate-y-0.5 font-bold flex items-center justify-center gap-2 transition-all">
+                            <i data-lucide="plus" class="w-5 h-5"></i> 리스트 추가
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto relative min-h-[200px]">
+                <div class="absolute top-2 left-2 text-[10px] bg-blue-100 text-blue-800 px-2 py-1 rounded font-medium flex items-center gap-1">
+                    <i data-lucide="info" class="w-3 h-3"></i> 셀을 더블클릭하면 산식을 확인할 수 있습니다.
+                </div>
+                <table class="w-full text-left whitespace-nowrap border-collapse mt-8">
+                    <thead class="bg-gray-100 text-gray-700 text-[13px] border-y-2 border-gray-300">
+                        <tr>
+                            <th class="p-3 w-32">동명칭 / 구분</th>
+                            <th class="p-3">지붕형태 / 가로길이</th>
+                            <th class="p-3 text-right">단순산출(m²)</th>
+                            <th class="p-3 text-right text-red-600">제외합계(m²)</th>
+                            <th class="p-3 text-right text-blue-700 font-bold">최종면적(m²)</th>
+                            <th class="p-3 text-right text-orange-600 font-bold">로스적용(m²)</th>
+                            <th class="p-3 text-center w-20">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="calcListTableBody">
+                        <!-- JS 랜더링 영역 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals (Hidden by default) -->
+    
+    <!-- 1. 메시지 모달 -->
+    <div id="msgModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full fade-in">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">알림</h3>
+            <p id="msgModalText" class="text-gray-600 mb-6"></p>
+            <button onclick="closeMsgModal()" class="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700">확인</button>
+        </div>
+    </div>
+
+    <!-- 2. 산식 확인 모달 -->
+    <div id="formulaModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden fade-in">
+            <div class="flex justify-between items-center p-4 bg-gray-50 border-b">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <i data-lucide="calculator" class="w-5 h-5 text-blue-600"></i>
+                    <span id="formulaModalTitle"></span>
+                </h3>
+                <button onclick="closeFormulaModal()" class="text-gray-500 hover:text-gray-800"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6">
+                <pre id="formulaModalText" class="whitespace-pre-wrap font-mono text-[13px] text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200 leading-relaxed"></pre>
+            </div>
+            <div class="p-4 bg-gray-50 border-t text-right">
+                <button onclick="closeFormulaModal()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-medium hover:bg-gray-700">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 데이터 수정 모달 -->
+    <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full my-8 fade-in">
+            <div class="flex justify-between items-center p-5 bg-blue-50 border-b border-blue-100 rounded-t-xl">
+                <h3 class="text-xl font-bold text-blue-900 flex items-center gap-2">
+                    <i data-lucide="edit-2" class="w-5 h-5"></i> 산출 리스트 항목 수정
+                </h3>
+                <button onclick="closeEditModal()" class="text-blue-500 hover:text-blue-800 bg-white rounded-full p-1 shadow-sm">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4 text-xs text-orange-600 bg-orange-50 p-2 rounded border border-orange-100 font-medium">
+                    * 수정 저장 시 현재 기본정보의 "처마높이, 최고높이, 로스율" 값이 적용되어 다시 계산됩니다.
+                </div>
+                <div id="editFormArea"></div>
+            </div>
+            <div class="p-4 bg-gray-50 border-t rounded-b-xl flex justify-end gap-3">
+                <button onclick="closeEditModal()" class="px-6 py-2.5 rounded-lg font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50">취소</button>
+                <button onclick="handleSaveEdit()" class="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm">변경사항 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. 매뉴얼 모달 -->
+    <div id="manualModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full my-8 fade-in flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center p-5 bg-blue-600 border-b rounded-t-xl text-white shrink-0">
+                <h3 class="text-xl font-bold flex items-center gap-2">
+                    <i data-lucide="book-open" class="w-6 h-6"></i> 판넬계산기 사용 매뉴얼
+                </h3>
+                <button onclick="closeManualModal()" class="text-blue-100 hover:text-white bg-blue-700 hover:bg-blue-800 rounded-full p-1 transition-colors">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 space-y-8 text-gray-700 leading-relaxed text-[15px]">
+                <section>
+                    <h4 class="text-lg font-bold text-blue-800 mb-3 border-b-2 border-blue-100 pb-2">1. 진행 순서 요약</h4>
+                    <ol class="list-decimal list-inside space-y-2 ml-2 font-medium">
+                        <li><span class="text-blue-600">기본정보 설정:</span> 전체 프로젝트에 적용될 높이와 로스율을 입력합니다.</li>
+                        <li><span class="text-blue-600">제외 창호 등록:</span> 자주 쓰이는 창호의 규격을 미리 데이터베이스에 등록합니다.</li>
+                        <li><span class="text-blue-600">산출 리스트 입력:</span> 구역별로 가로길이 및 제외 창호를 선택해 리스트에 추가합니다.</li>
+                        <li><span class="text-blue-600">데이터 내보내기:</span> 작업이 끝나면 Excel이나 JSON으로 저장하여 보관합니다.</li>
+                    </ol>
+                </section>
+                <section>
+                    <h4 class="text-lg font-bold text-blue-800 mb-3 border-b-2 border-blue-100 pb-2">2. 주요 기능 및 팁 (Tip!)</h4>
+                    <ul class="space-y-3 ml-2">
+                        <li class="flex gap-2"><span class="text-yellow-500">💡</span> <div><strong>산식 확인 (더블클릭)</strong>: 산출 리스트 표에서 <span class="bg-gray-100 px-1 rounded">단순산출</span>, <span class="bg-gray-100 px-1 rounded">제외합계</span>, <span class="bg-gray-100 px-1 rounded">최종면적</span>, <span class="bg-gray-100 px-1 rounded">로스적용</span> 셀을 <b>더블클릭</b>하시면 팝업으로 상세 산식을 확인할 수 있습니다.</div></li>
+                        <li class="flex gap-2"><span class="text-blue-500">➕</span> <div><strong>동적 입력란 추가</strong>: 입력 폼 내의 <span class="text-blue-600 font-bold">[+ 창호 추가]</span> 또는 <span class="text-blue-600 font-bold">[+ 수동입력 추가]</span> 버튼을 눌러 칸을 무한히 늘릴 수 있습니다.</div></li>
+                        <li class="flex gap-2"><span class="text-green-500">💾</span> <div><strong>데이터 저장/불러오기</strong>: <span class="bg-gray-100 px-1 rounded">JSON 저장</span> 버튼을 눌러 파일로 백업하고, 나중에 <span class="bg-gray-100 px-1 rounded">JSON 열기</span>로 이어서 작업할 수 있습니다.</div></li>
+                    </ul>
+                </section>
+                <section>
+                    <h4 class="text-lg font-bold text-blue-800 mb-3 border-b-2 border-blue-100 pb-2">3. 지붕 형태별 계산식 (단순 산출값)</h4>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4 text-sm">
+                        <p class="text-red-600 font-medium mb-2">* 모든 입력값은 밀리미터(mm) 기준이며, 최종 결괏값은 제곱미터(m²)로 자동 환산(÷ 1,000,000) 됩니다.</p>
+                        <div class="bg-white p-3 rounded shadow-sm border border-gray-100"><div class="font-bold text-gray-800 mb-1">▶ 상관없음</div><code class="text-blue-600 font-mono bg-blue-50 px-2 py-1 rounded">가로길이(L) × 처마높이</code></div>
+                        <div class="bg-white p-3 rounded shadow-sm border border-gray-100"><div class="font-bold text-gray-800 mb-1">▶ 1면경사지붕(사다리꼴)</div><code class="text-blue-600 font-mono bg-blue-50 px-2 py-1 rounded">(처마높이 + 최고높이) × 가로길이(L) × 0.5</code></div>
+                        <div class="bg-white p-3 rounded shadow-sm border border-gray-100"><div class="font-bold text-gray-800 mb-1">▶ 2면경사지붕(5각형)</div><code class="text-blue-600 font-mono bg-blue-50 px-2 py-1 rounded">(처마높이 × 가로길이) + ((최고높이 - 처마높이) × 가로길이 × 0.5)</code></div>
+                    </div>
+                </section>
+                <section>
+                    <h4 class="text-lg font-bold text-blue-800 mb-3 border-b-2 border-blue-100 pb-2">4. 최종 면적 및 로스율 계산식</h4>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3 text-sm">
+                        <div><span class="font-bold text-gray-700 w-24 inline-block">최종 면적</span><code class="text-gray-800 font-mono bg-white px-2 py-1 rounded border">단순산출값 - (등록창호 제외면적 합계 + 수동 입력 제외면적 합계)</code></div>
+                        <div><span class="font-bold text-gray-700 w-24 inline-block">로스적용</span><code class="text-orange-700 font-mono bg-orange-50 px-2 py-1 rounded border border-orange-200">최종 면적 × (1 + (전체 로스율 % / 100))</code></div>
+                    </div>
+                </section>
+            </div>
+            <div class="p-4 bg-gray-50 border-t rounded-b-xl flex justify-center shrink-0">
+                <button onclick="closeManualModal()" class="px-10 py-2.5 rounded-lg font-bold text-white bg-gray-800 hover:bg-gray-900 shadow-sm transition-colors w-full sm:w-auto">매뉴얼 닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Logic -->
+    <script>
+        // --- State Management ---
+        const ROOF_TYPES = ["상관없음", "1면경사지붕(사다리꼴)", "2면경사지붕(5각형)"];
+        
+        const getInitialFormState = () => ({
+            id: '', buildingName: '', category: '', roofType: ROOF_TYPES[0], width: 0,
+            windowSelections: [{ winId: '', count: 0 }, { winId: '', count: 0 }],
+            manualExcludes: [{ desc: '', area: 0 }]
+        });
+
+        let state = {
+            basicInfo: { projectName: '', vH1: 0, vH2: 0, lossRate: 5 },
+            windows: [{ id: '1', name: 'PL1', area: 0 }],
+            calcList: [],
+            calcForm: getInitialFormState(),
+            editForm: null
+        };
+
+        // --- Utils & Helpers ---
+        const formatNum = (num, maxFractions = 2) => Number(num).toLocaleString(undefined, { maximumFractionDigits: maxFractions });
+        const parseNum = (val) => Number(val) || 0;
+        
+        // Update Icons after DOM changes
+        const renderIcons = () => lucide.createIcons();
+
+        // Modal Helpers
+        const showMsg = (msg) => {
+            document.getElementById('msgModalText').innerText = msg;
+            document.getElementById('msgModal').classList.remove('hidden');
+        };
+        const closeMsgModal = () => document.getElementById('msgModal').classList.add('hidden');
+        
+        const openManualModal = () => document.getElementById('manualModal').classList.remove('hidden');
+        const closeManualModal = () => document.getElementById('manualModal').classList.add('hidden');
+
+        const closeFormulaModal = () => document.getElementById('formulaModal').classList.add('hidden');
+        const closeEditModal = () => {
+            state.editForm = null;
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        // --- Core Calculations ---
+        const calculateSimpleValue = (roofType, width, h1, h2) => {
+            const w = parseNum(width), vH1 = parseNum(h1), vH2 = parseNum(h2);
+            let area = 0;
+            switch (roofType) {
+                case "1면경사지붕(사다리꼴)": area = (vH1 + vH2) * w * 0.5; break;
+                case "2면경사지붕(5각형)": area = (vH1 * w) + ((vH2 - vH1) * w * 0.5); break;
+                case "상관없음": default: area = w * vH1; break;
+            }
+            return area / 1000000;
+        };
+
+        const calculateExcludedTotal = (windowSelections, manualExcludes) => {
+            const winArea = windowSelections.reduce((sum, sel) => {
+                const win = state.windows.find(w => w.id === sel.winId);
+                return sum + (win && sel.count ? win.area * parseNum(sel.count) : 0);
+            }, 0);
+            const manArea = manualExcludes.reduce((sum, man) => sum + parseNum(man.area), 0);
+            return winArea + manArea;
+        };
+
+        const processCalcItem = (formObj) => {
+            const simpleVal = calculateSimpleValue(formObj.roofType, formObj.width, state.basicInfo.vH1, state.basicInfo.vH2);
+            const excludeTotal = calculateExcludedTotal(formObj.windowSelections, formObj.manualExcludes);
+            const finalArea = simpleVal - excludeTotal;
+            const lossArea = finalArea * (1 + (state.basicInfo.lossRate / 100));
+
+            return {
+                ...JSON.parse(JSON.stringify(formObj)), // Deep copy form
+                simpleValue: simpleVal,
+                excludedAreaTotal: excludeTotal,
+                finalArea: finalArea,
+                lossArea: lossArea,
+                meta: { vH1: state.basicInfo.vH1, vH2: state.basicInfo.vH2, lossRate: state.basicInfo.lossRate }
+            };
+        };
+
+        // --- Global Actions ---
+        function updateBasicInfo(field, value) {
+            state.basicInfo[field] = field === 'projectName' ? value : parseNum(value);
+            document.getElementById('previewLossRate').innerText = state.basicInfo.lossRate;
+            updateLivePreviews();
+        }
+
+        function addWindow() {
+            const nameEl = document.getElementById('newWinName');
+            const areaEl = document.getElementById('newWinArea');
+            if (!nameEl.value.trim()) { showMsg("창호 명칭을 입력해주세요."); return; }
+            
+            state.windows.push({
+                id: Date.now().toString(),
+                name: nameEl.value.trim(),
+                area: parseNum(areaEl.value)
+            });
+            nameEl.value = ''; areaEl.value = '';
+            
+            renderWindowsTable();
+            renderCalcForm(); // select options 업데이트 위해
+            if(state.editForm) renderCalcForm(true);
+        }
+
+        function removeWindow(id) {
+            state.windows = state.windows.filter(w => w.id !== id);
+            renderWindowsTable();
+            renderCalcForm();
+            if(state.editForm) renderCalcForm(true);
+        }
+
+        function addCalcItem() {
+            if (!state.calcForm.buildingName || !state.calcForm.category) {
+                showMsg("동명칭과 구분을 입력해주세요."); return;
+            }
+            const newItem = processCalcItem(state.calcForm);
+            newItem.id = Date.now().toString();
+            state.calcList.push(newItem);
+            
+            // 폼 리셋 (명칭, 구분은 유지)
+            const bName = state.calcForm.buildingName;
+            const cat = state.calcForm.category;
+            state.calcForm = getInitialFormState();
+            state.calcForm.buildingName = bName;
+            state.calcForm.category = cat;
+
+            renderCalcForm();
+            renderCalcListTable();
+        }
+
+        function removeCalcItem(id) {
+            state.calcList = state.calcList.filter(item => item.id !== id);
+            renderCalcListTable();
+        }
+
+        // Form Interactions
+        function updateFormObj(isEdit, field, value) {
+            const form = isEdit ? state.editForm : state.calcForm;
+            form[field] = value;
+            if(!isEdit) updateLivePreviews();
+            else updateLivePreviews(true);
+        }
+
+        function updateFormArray(isEdit, arrayName, idx, field, value) {
+            const form = isEdit ? state.editForm : state.calcForm;
+            form[arrayName][idx][field] = value;
+            if(!isEdit) updateLivePreviews();
+            else updateLivePreviews(true);
+        }
+
+        function addFormArrayItem(isEdit, arrayName, type) {
+            const form = isEdit ? state.editForm : state.calcForm;
+            const defaultObj = type === 'window' ? { winId: '', count: 0 } : { desc: '', area: 0 };
+            form[arrayName].push(defaultObj);
+            renderCalcForm(isEdit);
+        }
+
+        function removeFormArrayItem(isEdit, arrayName, idx) {
+            const form = isEdit ? state.editForm : state.calcForm;
+            form[arrayName].splice(idx, 1);
+            renderCalcForm(isEdit);
+        }
+
+        // Live Previews
+        function updateLivePreviews(isEdit = false) {
+            const form = isEdit ? state.editForm : state.calcForm;
+            const pSimple = calculateSimpleValue(form.roofType, form.width, state.basicInfo.vH1, state.basicInfo.vH2);
+            const pExclude = calculateExcludedTotal(form.windowSelections, form.manualExcludes);
+            const pFinal = pSimple - pExclude;
+            const pLoss = pFinal * (1 + (state.basicInfo.lossRate / 100));
+
+            if (!isEdit) {
+                document.getElementById('previewExcludeTotal').innerText = `-${formatNum(pExclude)}`;
+                document.getElementById('previewSimple').innerText = formatNum(pSimple);
+                document.getElementById('previewFinal').innerText = formatNum(pFinal);
+                document.getElementById('previewLoss').innerText = formatNum(pLoss);
+            } else {
+                document.getElementById('editPreviewExcludeTotal').innerText = `-${formatNum(pExclude)}`;
+            }
+        }
+
+        // Formula Info (Double click)
+        window.showFormulaInfo = (type, itemId) => {
+            const item = state.calcList.find(i => i.id === itemId);
+            if(!item) return;
+
+            let title = '', formula = '';
+            const meta = item.meta || state.basicInfo;
+            const w = formatNum(item.width, 0);
+            const h1 = formatNum(meta.vH1, 0);
+            const h2 = formatNum(meta.vH2, 0);
+
+            if (type === 'simple') {
+                title = '단순산출 산식 상세';
+                if (item.roofType === '1면경사지붕(사다리꼴)') {
+                    formula = `[계산식: (처마높이 + 최고높이) × 가로길이 × 0.5 ÷ 1,000,000]\n\n(${h1} + ${h2}) × ${w} × 0.5 ÷ 1,000,000\n`;
+                } else if (item.roofType === '2면경사지붕(5각형)') {
+                    formula = `[계산식: (처마높이 × 가로길이) + ((최고높이 - 처마높이) × 가로길이 × 0.5) ÷ 1,000,000]\n\n(${h1} × ${w}) + ((${h2} - ${h1}) × ${w} × 0.5) ÷ 1,000,000\n`;
+                } else {
+                    formula = `[계산식: 가로길이 × 처마높이 ÷ 1,000,000]\n\n${w} × ${h1} ÷ 1,000,000\n`;
+                }
+                formula += `= ${formatNum(item.simpleValue, 4)} m²`;
+            } else if (type === 'exclude') {
+                title = '제외합계 산출 상세';
+                let parts = [];
+                item.windowSelections.forEach(sel => {
+                    if (sel.winId && sel.count) {
+                        const win = state.windows.find(w => w.id === sel.winId);
+                        if (win) parts.push(`[${win.name}] ${win.area}m² × ${sel.count}개 = ${win.area * sel.count}m²`);
+                    }
+                });
+                item.manualExcludes.forEach(man => {
+                    if (man.desc && man.area) parts.push(`[수동: ${man.desc}] = ${man.area}m²`);
+                });
+                formula = parts.length > 0 ? parts.join('\n') : '적용된 제외 항목이 없습니다.';
+                formula += `\n\n총 제외 합계: ${formatNum(item.excludedAreaTotal, 4)} m²`;
+            } else if (type === 'final') {
+                title = '최종면적 산식 상세';
+                formula = `단순산출(${formatNum(item.simpleValue, 4)} m²) - 제외합계(${formatNum(item.excludedAreaTotal, 4)} m²)\n\n= ${formatNum(item.finalArea, 4)} m²`;
+            } else if (type === 'loss') {
+                title = '로스적용면적 산식 상세';
+                formula = `최종면적(${formatNum(item.finalArea, 4)} m²) × (1 + 로스율 ${meta.lossRate}%)\n\n= ${formatNum(item.lossArea, 4)} m²`;
+            }
+
+            document.getElementById('formulaModalTitle').innerText = title;
+            document.getElementById('formulaModalText').innerText = formula;
+            document.getElementById('formulaModal').classList.remove('hidden');
+        };
+
+        // Edit
+        window.openEditModal = (id) => {
+            const item = state.calcList.find(i => i.id === id);
+            if(!item) return;
+            state.editForm = JSON.parse(JSON.stringify(item));
+            renderCalcForm(true);
+            document.getElementById('editModal').classList.remove('hidden');
+        };
+
+        window.handleSaveEdit = () => {
+            if (!state.editForm.buildingName || !state.editForm.category) {
+                showMsg("동명칭과 구분을 입력해주세요."); return;
+            }
+            const updatedItem = processCalcItem(state.editForm);
+            const idx = state.calcList.findIndex(i => i.id === updatedItem.id);
+            if(idx !== -1) state.calcList[idx] = updatedItem;
+            
+            closeEditModal();
+            renderCalcListTable();
+        };
+
+        // File I/O
+        window.handleExportJSON = () => {
+            const data = { basicInfo: state.basicInfo, windows: state.windows, calcList: state.calcList };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `판넬계산기_데이터_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        window.handleImportJSON = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const data = JSON.parse(evt.target.result);
+                    if (data.basicInfo) {
+                        state.basicInfo = data.basicInfo;
+                        document.getElementById('projectName').value = state.basicInfo.projectName || '';
+                        document.getElementById('vH1').value = state.basicInfo.vH1 || '';
+                        document.getElementById('vH2').value = state.basicInfo.vH2 || '';
+                        document.getElementById('lossRate').value = state.basicInfo.lossRate || 5;
+                        document.getElementById('previewLossRate').innerText = state.basicInfo.lossRate || 5;
+                    }
+                    if (data.windows) state.windows = data.windows;
+                    if (data.calcList) state.calcList = data.calcList;
+                    
+                    renderWindowsTable();
+                    renderCalcForm();
+                    renderCalcListTable();
+                    showMsg("데이터를 성공적으로 불러왔습니다.");
+                } catch (error) {
+                    showMsg("파일 형식이 올바르지 않습니다.");
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        };
+
+        window.handleExportCSV = () => {
+            const BOM = "\uFEFF";
+            let csv = "동명칭,구분,지붕형태,가로길이(L),단순산출값(m²),제외합계(m²),최종면적(m²),로스적용면적(m²),제외항목상세\n";
+            
+            state.calcList.forEach(item => {
+                let excludesArr = [];
+                item.windowSelections?.forEach(sel => {
+                    if (sel.winId && sel.count) {
+                        const w = state.windows.find(win => win.id === sel.winId);
+                        if (w) excludesArr.push(`${w.name}(${sel.count}개)`);
+                    }
+                });
+                item.manualExcludes?.forEach(man => {
+                    if (man.desc && man.area) excludesArr.push(`[수동]${man.desc}(${man.area}m²)`);
+                });
+                
+                const row = [
+                    item.buildingName, item.category, item.roofType, item.width,
+                    item.simpleValue, item.excludedAreaTotal, item.finalArea, item.lossArea,
+                    `"${excludesArr.join(" / ")}"`
+                ].join(",");
+                csv += row + "\n";
+            });
+            
+            const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `판넬계산기_산출리스트_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+
+        // --- Rendering Functions ---
+        
+        function renderWindowsTable() {
+            const tbody = document.getElementById('windowsTableBody');
+            if(state.windows.length === 0){
+                tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-gray-400">등록된 창호가 없습니다.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = state.windows.map(win => `
+                <tr class="hover:bg-blue-50/50 border-b last:border-0 transition-colors">
+                    <td class="p-2 font-medium text-gray-700">${win.name}</td>
+                    <td class="p-2 text-right text-gray-600 font-mono">${formatNum(win.area)}</td>
+                    <td class="p-2 text-center">
+                        <button onclick="removeWindow('${win.id}')" class="text-gray-400 hover:text-red-500 p-1 rounded transition">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            renderIcons();
+        }
+
+        // Shared form renderer for Main Input & Edit Modal
+        function generateFormHTML(formState, isEdit) {
+            const isE = isEdit ? 'true' : 'false';
+            const exId = isEdit ? 'editPreviewExcludeTotal' : 'previewExcludeTotal';
+            
+            const windowOptionsHTML = `<option value="">선택안함</option>` + 
+                state.windows.map(w => `<option value="${w.id}">${w.name} (${w.area}m²)</option>`).join('');
+
+            const winSelectsHTML = formState.windowSelections.map((sel, idx) => `
+                <div class="flex gap-1 items-center mb-2">
+                    <select onchange="updateFormArray(${isE}, 'windowSelections', ${idx}, 'winId', this.value)" class="flex-1 border rounded p-1.5 text-xs bg-gray-50">
+                        ${windowOptionsHTML.replace(`value="${sel.winId}"`, `value="${sel.winId}" selected`)}
+                    </select>
+                    <input type="number" oninput="updateFormArray(${isE}, 'windowSelections', ${idx}, 'count', this.value)" value="${sel.count || ''}" class="w-16 border rounded p-1.5 text-xs text-right" placeholder="수량" />
+                    <span class="text-xs text-gray-500">개</span>
+                    ${formState.windowSelections.length > 1 ? `<button onclick="removeFormArrayItem(${isE}, 'windowSelections', ${idx})" class="ml-1 text-red-400 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                </div>
+            `).join('');
+
+            const manExcludesHTML = formState.manualExcludes.map((man, idx) => `
+                <div class="flex gap-1 items-center mb-2">
+                    <input type="text" oninput="updateFormArray(${isE}, 'manualExcludes', ${idx}, 'desc', this.value)" value="${man.desc}" class="flex-1 border rounded p-1.5 text-xs bg-gray-50" placeholder="예: 에어컨관통" />
+                    <input type="number" oninput="updateFormArray(${isE}, 'manualExcludes', ${idx}, 'area', this.value)" value="${man.area || ''}" class="w-20 border rounded p-1.5 text-xs text-right" placeholder="면적(m²)" />
+                    ${formState.manualExcludes.length > 1 ? `<button onclick="removeFormArrayItem(${isE}, 'manualExcludes', ${idx})" class="ml-1 text-red-400 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                </div>
+            `).join('');
+
+            const roofOptionsHTML = ROOF_TYPES.map(type => `<option value="${type}" ${formState.roofType===type?'selected':''}>${type}</option>`).join('');
+
+            return `
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">동명칭</label>
+                        <input type="text" oninput="updateFormObj(${isE}, 'buildingName', this.value)" value="${formState.buildingName}" class="w-full border rounded p-2 text-sm" placeholder="ex) 1호동-1" />
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">구분</label>
+                        <input type="text" oninput="updateFormObj(${isE}, 'category', this.value)" value="${formState.category}" class="w-full border rounded p-2 text-sm" placeholder="ex) 정면" />
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-gray-600 mb-1">지붕형태</label>
+                        <select onchange="updateFormObj(${isE}, 'roofType', this.value)" class="w-full border rounded p-2 bg-white text-sm">
+                            ${roofOptionsHTML}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1 font-bold">가로길이(L, mm)</label>
+                        <input type="number" oninput="updateFormObj(${isE}, 'width', this.value)" value="${formState.width || ''}" class="w-full border rounded p-2 text-right bg-yellow-50 focus:bg-white text-sm" placeholder="0" />
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 border border-gray-200 rounded space-y-3 shadow-sm">
+                    <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                        <span class="text-xs font-semibold text-gray-700 flex items-center gap-1"><i data-lucide="minus" class="w-4 h-4 text-red-500"></i> 제외 항목 설정 (동적 추가 가능)</span>
+                        <span class="text-xs text-red-600 bg-red-50 px-2 py-1 rounded font-bold border border-red-100">합계제외: <span id="${exId}">0.00</span> m²</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-gray-600 mb-2">제외창호 리스트</label>
+                            ${winSelectsHTML}
+                            <button onclick="addFormArrayItem(${isE}, 'windowSelections', 'window')" class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium py-1">
+                                <i data-lucide="plus" class="w-3 h-3"></i> 창호 추가
+                            </button>
+                        </div>
+                        <div class="space-y-1 border-l border-gray-100 pl-4">
+                            <label class="block text-xs font-medium text-gray-600 mb-2">직접 수동제외 (명칭 / m²)</label>
+                            ${manExcludesHTML}
+                            <button onclick="addFormArrayItem(${isE}, 'manualExcludes', 'manual')" class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium py-1">
+                                <i data-lucide="plus" class="w-3 h-3"></i> 수동입력 추가
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderCalcForm(isEdit = false) {
+            const containerId = isEdit ? 'editFormArea' : 'mainFormArea';
+            const formState = isEdit ? state.editForm : state.calcForm;
+            if(!formState) return;
+
+            document.getElementById(containerId).innerHTML = generateFormHTML(formState, isEdit);
+            updateLivePreviews(isEdit);
+            renderIcons();
+        }
+
+        function renderCalcListTable() {
+            const tbody = document.getElementById('calcListTableBody');
+            if(state.calcList.length === 0){
+                tbody.innerHTML = `<tr><td colspan="7" class="p-10 text-center text-gray-400 bg-white">추가된 산출 데이터가 없습니다.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = state.calcList.map((item, idx) => {
+                let excludesArr = [];
+                item.windowSelections?.forEach(sel => {
+                    if(sel.winId && sel.count) {
+                        const w = state.windows.find(win => win.id === sel.winId);
+                        if(w) excludesArr.push(`<span class="bg-gray-200 px-1.5 py-0.5 rounded mr-1 inline-block">${w.name}(${sel.count})</span>`);
+                    }
+                });
+                item.manualExcludes?.forEach(man => {
+                    if(man.desc && man.area) excludesArr.push(`<span class="bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded mr-1 inline-block">수동: ${man.desc}(${man.area}m²)</span>`);
+                });
+                const excludesHTML = excludesArr.length === 0 ? '<span>없음</span>' : excludesArr.join('');
+                const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30';
+
+                return `
+                <tbody class="border-b border-gray-200 hover:bg-slate-50/50 transition-colors ${bgClass}">
+                    <tr>
+                        <td class="p-3 font-medium text-gray-900">
+                            ${item.buildingName}
+                            <span class="block text-xs text-gray-500 font-normal mt-0.5">${item.category}</span>
+                        </td>
+                        <td class="p-3">
+                            <span class="text-xs text-gray-600">${item.roofType}</span>
+                            <div class="font-semibold text-gray-800 mt-0.5">L = ${formatNum(item.width, 0)} mm</div>
+                        </td>
+                        <td class="p-3 text-right font-medium text-gray-600 bg-gray-50/50 cursor-pointer hover:bg-yellow-100 transition-colors" title="더블클릭하여 산식 확인" ondblclick="showFormulaInfo('simple', '${item.id}')">
+                            ${formatNum(item.simpleValue)}
+                        </td>
+                        <td class="p-3 text-right text-red-500 font-medium cursor-pointer hover:bg-yellow-100 transition-colors" title="더블클릭하여 산식 확인" ondblclick="showFormulaInfo('exclude', '${item.id}')">
+                            -${formatNum(item.excludedAreaTotal)}
+                        </td>
+                        <td class="p-3 text-right font-bold text-blue-700 bg-blue-50/50 text-base cursor-pointer hover:bg-yellow-100 transition-colors" title="더블클릭하여 산식 확인" ondblclick="showFormulaInfo('final', '${item.id}')">
+                            ${formatNum(item.finalArea)}
+                        </td>
+                        <td class="p-3 text-right font-black text-orange-600 bg-orange-50/50 text-base cursor-pointer hover:bg-yellow-100 transition-colors" title="더블클릭하여 산식 확인" ondblclick="showFormulaInfo('loss', '${item.id}')">
+                            ${formatNum(item.lossArea)}
+                        </td>
+                        <td class="p-2 text-center align-middle" rowspan="2">
+                            <div class="flex flex-col items-center gap-1 justify-center">
+                                <button onclick="openEditModal('${item.id}')" class="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded transition" title="수정">
+                                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="removeCalcItem('${item.id}')" class="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition" title="삭제">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" class="px-3 pb-3 pt-1 text-[11px] text-gray-500 border-t border-dashed border-gray-100">
+                            <div class="flex items-center flex-wrap gap-1">
+                                <span class="font-semibold text-gray-500">제외상세:</span>
+                                ${excludesHTML}
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>`;
+            }).join('');
+            
+            renderIcons();
+        }
+
+        // Initialize App
+        window.onload = () => {
+            renderWindowsTable();
+            renderCalcForm();
+            renderCalcListTable();
+            updateLivePreviews();
+        };
+
+    </script>
+</body>
+</html>

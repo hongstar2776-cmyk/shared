@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>건축 개략견적 산출 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- 로컬/웹 완벽 작동 Firebase Compat SDK (Auth 포함) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+
+    <style>
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
+        
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; font-weight: 600; }
+        .tab-inactive { border-bottom: 2px solid transparent; color: #6b7280; }
+        .tab-inactive:hover { color: #374151; border-bottom: 2px solid #d1d5db; }
+        
+        .table-container { max-height: 600px; overflow-y: auto; overflow-x: auto; }
+        .table-header-sticky th { position: sticky; top: 0; background-color: #f9fafb; z-index: 10; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans">
+
+    <!-- 로딩 및 에러 오버레이 -->
+    <div id="loading-overlay" class="fixed inset-0 z-[100] bg-white bg-opacity-95 flex flex-col items-center justify-center transition-opacity duration-500 hidden">
+        <i class="fas fa-circle-notch fa-spin text-5xl text-blue-600 mb-4"></i>
+        <p class="text-gray-800 font-bold text-lg" id="loading-text">처리 중...</p>
+        <p class="text-gray-500 text-sm mt-2" id="loading-subtext">잠시만 기다려주세요.</p>
+    </div>
+
+    <!-- 로그인 화면 (첫 화면) -->
+    <div id="login-container" class="min-h-screen flex items-center justify-center bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-xl border border-gray-200 text-center">
+            <div>
+                <div class="mx-auto h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                    <i class="fas fa-hard-hat text-3xl text-blue-600"></i>
+                </div>
+                <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                    건축 개략견적 시스템
+                </h2>
+                <p class="mt-2 text-center text-sm text-gray-600">
+                    인가된 담당자만 접근할 수 있습니다.<br>사내 구글 계정으로 로그인해주세요.
+                </p>
+            </div>
+            <div class="mt-8">
+                <button onclick="handleGoogleLogin()" class="group relative w-full flex justify-center py-3 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm">
+                    <span class="absolute left-0 inset-y-0 flex items-center pl-3">
+                        <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" class="h-5 w-5">
+                    </span>
+                    Google 계정으로 계속하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메인 앱 영역 (로그인 성공 시 표시) -->
+    <div id="app-container" class="hidden">
+        <div class="max-w-7xl mx-auto pt-10 pb-20 px-4 sm:px-6 lg:px-8">
+            
+            <!-- Header & Logout -->
+            <div class="mb-8 text-center relative">
+                <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">건축 개략견적 산출 시스템</h1>
+                <p class="mt-2 text-sm text-gray-500">기본 정보를 입력하시면 빠르고 정확한 개략견적을 산출해 드립니다.</p>
+                <div class="absolute top-0 right-0">
+                    <button onclick="handleLogout()" class="text-sm text-gray-500 hover:text-red-600 transition-colors">
+                        <i class="fas fa-sign-out-alt mr-1"></i> 로그아웃
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stepper Navigation -->
+            <div class="mb-10 max-w-5xl mx-auto">
+                <nav aria-label="Progress">
+                    <ol role="list" class="flex items-center justify-between w-full relative">
+                        <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                            <div class="h-0.5 w-full bg-gray-200"></div>
+                        </div>
+                        
+                        <li class="relative">
+                            <div class="flex flex-col items-center">
+                                <span class="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center ring-4 ring-white shadow text-white font-bold z-10">1</span>
+                                <span class="mt-2 text-sm font-semibold text-blue-600">기본정보 입력</span>
+                            </div>
+                        </li>
+                        <li class="relative">
+                            <div class="flex flex-col items-center">
+                                <span class="h-10 w-10 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center ring-4 ring-white shadow text-gray-500 font-bold z-10">2</span>
+                                <span class="mt-2 text-sm font-medium text-gray-500">상세 설정</span>
+                            </div>
+                        </li>
+                        <li class="relative">
+                            <div class="flex flex-col items-center">
+                                <span class="h-10 w-10 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center ring-4 ring-white shadow text-gray-500 font-bold z-10">3</span>
+                                <span class="mt-2 text-sm font-medium text-gray-500">견적 산출</span>
+                            </div>
+                        </li>
+                        <li class="relative">
+                            <div class="flex flex-col items-center">
+                                <span class="h-10 w-10 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center ring-4 ring-white shadow text-gray-500 font-bold z-10">4</span>
+                                <span class="mt-2 text-sm font-medium text-gray-500">결과 출력</span>
+                            </div>
+                        </li>
+                    </ol>
+                </nav>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 max-w-5xl mx-auto" id="main-container">
+                
+                <!-- Step 1: 기본정보 입력 -->
+                <div id="step-1" class="p-8">
+                    <div class="flex justify-between items-center mb-6 border-b pb-3">
+                        <h2 class="text-xl font-bold text-gray-900"><i class="fas fa-building text-blue-500 mr-2"></i>건축물 기본 정보</h2>
+                        <!-- 단가표 수정 버튼 -->
+                        <button type="button" onclick="openPriceEditor()" class="inline-flex items-center px-4 py-2 border border-transparent shadow-md text-sm font-bold rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all transform hover:scale-105">
+                            <i class="fas fa-edit mr-2"></i> 단가표 수동 수정
+                        </button>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- Area Inputs (Left Column) -->
+                        <div class="space-y-6">
+                            <!-- 대지면적 -->
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">대지면적</label>
+                                <div class="flex items-center space-x-3">
+                                    <div class="relative flex flex-1 shadow-sm">
+                                        <input type="number" id="siteArea" class="block w-full min-w-0 flex-1 px-3 py-2.5 rounded-none rounded-l-lg border border-gray-300 bg-gray-50 text-right focus:z-10 focus:border-blue-500 focus:ring-blue-500 sm:text-base" placeholder="0.00" oninput="calculateArea('site')">
+                                        <select id="siteUnit" class="block rounded-none rounded-r-lg border border-l-0 border-gray-300 bg-white px-3 py-2.5 text-gray-700 focus:z-10 focus:border-blue-500 focus:ring-blue-500 sm:text-base cursor-pointer" onchange="calculateArea('site')">
+                                            <option value="py" selected>평</option>
+                                            <option value="m2">m²</option>
+                                        </select>
+                                    </div>
+                                    <div class="text-sm font-medium text-gray-500 w-24 text-right shrink-0" id="siteResult">= 0.00 m&sup2;</div>
+                                </div>
+                            </div>
+
+                            <!-- 건축면적 -->
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">건축면적</label>
+                                <div class="flex items-center space-x-3">
+                                    <div class="relative flex flex-1 shadow-sm">
+                                        <input type="number" id="buildArea" class="block w-full min-w-0 flex-1 px-3 py-2.5 rounded-none rounded-l-lg border border-gray-300 bg-gray-50 text-right focus:z-10 focus:border-blue-500 focus:ring-blue-500 sm:text-base" placeholder="0.00" oninput="calculateArea('build')">
+                                        <select id="buildUnit" class="block rounded-none rounded-r-lg border border-l-0 border-gray-300 bg-white px-3 py-2.5 text-gray-700 focus:z-10 focus:border-blue-500 focus:ring-blue-500 sm:text-base cursor-pointer" onchange="calculateArea('build')">
+                                            <option value="py" selected>평</option>
+                                            <option value="m2">m²</option>
+                                        </select>
+                                    </div>
+                                    <div class="text-sm font-medium text-gray-500 w-24 text-right shrink-0" id="buildResult">= 0.00 m&sup2;</div>
+                                </div>
+                            </div>
+
+                            <!-- 연면적 -->
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">건축물 연면적</label>
+                                <div class="flex items-center space-x-3">
+                                    <div class="relative flex flex-1 shadow-sm">
+                                        <input type="number" id="totalArea" class="block w-full min-w-0 flex-1 px-3 py-2.5 rounded-none rounded-l-lg border border-gray-300 bg-gray-50 text-right focus:z-10 focus:border-blue-500 focus:ring-blue-500 sm:text-base" placeholder="0.00" oninput="calculateArea('total')">
+                                        <select id="totalUnit" class="block rounded-none rounded-r-lg border border-l-0 border-gray-300 bg-white px-3 py-2.5 text-gray-700 focus:z-10 focus:border-blue-500 focus:ring-blue-500 sm:text-base cursor-pointer" onchange="calculateArea('total')">
+                                            <option value="py" selected>평</option>
+                                            <option value="m2">m²</option>
+                                        </select>
+                                    </div>
+                                    <div class="text-sm font-medium text-gray-500 w-24 text-right shrink-0" id="totalResult">= 0.00 m&sup2;</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Other Inputs (Right Column) -->
+                        <div class="space-y-6">
+                            <div>
+                                <label for="buildingCount" class="block text-sm font-bold text-gray-700 mb-2">건축물 동수</label>
+                                <div class="relative">
+                                    <input type="number" id="buildingCount" min="1" step="1" class="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 border transition-colors text-right" placeholder="예: 1">
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"><span class="text-gray-500 sm:text-sm">동</span></div>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="floorCount" class="block text-sm font-bold text-gray-700 mb-2">건축물 층수 (지상/지하 포함 총 층수)</label>
+                                <div class="relative">
+                                    <input type="number" id="floorCount" min="1" step="1" class="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 border transition-colors text-right" placeholder="예: 3">
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"><span class="text-gray-500 sm:text-sm">층</span></div>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="mainUse" class="block text-sm font-bold text-gray-700 mb-2">주용도</label>
+                                <select id="mainUse" class="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white border cursor-pointer transition-colors shadow-sm">
+                                    <option value="retail" selected>근린생활시설 - 소매점</option>
+                                    <option value="warehouse">근린생활시설 - 창고</option>
+                                    <option value="factory">근린생활시설 - 공장</option>
+                                    <option value="office">근린생활시설 - 사무소</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: 상세 설정 (동적 생성) -->
+                <div id="step-2" class="p-8 hidden">
+                    <h2 class="text-xl font-bold text-gray-900 mb-6 border-b pb-3"><i class="fas fa-sliders-h text-blue-500 mr-2"></i>상세 설정 (커스터마이징)</h2>
+                    <p class="text-sm text-gray-500 mb-6">1단계 기본 정보를 바탕으로 산출된 설정값입니다. 아래 탭을 통해 현장 상황에 맞게 값을 수정할 수 있습니다.</p>
+                    
+                    <div class="border-b border-gray-200 mb-6">
+                        <nav class="-mb-px flex space-x-8" aria-label="Tabs" id="dynamic-tabs-container"></nav>
+                    </div>
+                    <div id="dynamic-tab-contents"></div>
+                </div>
+
+                <!-- Step 3: 견적 산출 -->
+                <div id="step-3" class="p-8 hidden">
+                    <div class="flex justify-between items-end mb-6 border-b pb-3">
+                        <h2 class="text-xl font-bold text-gray-900"><i class="fas fa-calculator text-blue-500 mr-2"></i>견적 산출 결과</h2>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">총 개략 공사비 <span id="pyeong-price-display" class="ml-2 text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">(평당: 0 원)</span></p>
+                            <p class="text-2xl font-bold text-blue-600 mt-1" id="total-price-display">0 원</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3 Tabs (공종별 필터) -->
+                    <div class="border-b border-gray-200 mb-4">
+                        <nav class="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs" id="step3-tabs-container"></nav>
+                    </div>
+
+                    <div class="table-container border border-gray-200 rounded-lg max-w-full">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm whitespace-nowrap">
+                            <thead class="bg-gray-50 table-header-sticky">
+                                <tr>
+                                    <th class="px-3 py-3 text-left font-medium text-gray-500 border-r">공종</th>
+                                    <th class="px-3 py-3 text-left font-medium text-gray-500 border-r">품명</th>
+                                    <th class="px-3 py-3 text-left font-medium text-gray-500 border-r">규격</th>
+                                    <th class="px-2 py-3 text-center font-medium text-gray-500 border-r">단위</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r bg-blue-50">수량</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r">재료비단가</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r">재료비금액</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r">노무비단가</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r">노무비금액</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r">경비단가</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r">경비금액</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-500 border-r">합계단가</th>
+                                    <th class="px-3 py-3 text-right font-medium text-gray-900 bg-gray-100">합계금액</th>
+                                </tr>
+                            </thead>
+                            <tbody id="estimate-table-body" class="bg-white divide-y divide-gray-200">
+                                <!-- JS로 동적 생성됨 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bottom Actions -->
+                <div class="px-8 py-5 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+                    <button type="button" id="btn-prev" onclick="prevStep()" class="invisible inline-flex items-center px-6 py-3 border border-gray-300 shadow-sm text-base font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i> 이전 단계
+                    </button>
+                    <button type="button" id="btn-next" onclick="nextStep()" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                        상세 설정으로 이동 <i class="fas fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 단가 수정 모달 -->
+    <div id="price-modal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900"><i class="fas fa-coins text-yellow-500 mr-2"></i>공종별 단가표 수정 (Firestore 연동)</h3>
+                    <p class="text-sm text-gray-500 mt-1">이곳에서 수정한 단가는 클라우드(Firestore)에 영구 저장되며 3단계 산출에 적용됩니다.</p>
+                </div>
+                <button onclick="closePriceEditor()" class="text-gray-400 hover:text-gray-600 transition-colors"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 bg-white">
+                <div class="border border-gray-200 rounded-lg overflow-hidden">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-100 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th class="px-3 py-3 text-left font-medium text-gray-600 border-r w-32">공종</th>
+                                <th class="px-3 py-3 text-left font-medium text-gray-600 border-r">품명 (규격)</th>
+                                <th class="px-2 py-3 text-center font-medium text-gray-600 border-r w-16">단위</th>
+                                <th class="px-3 py-3 text-right font-medium text-gray-600 border-r w-32">재료비단가</th>
+                                <th class="px-3 py-3 text-right font-medium text-gray-600 border-r w-32">노무비단가</th>
+                                <th class="px-3 py-3 text-right font-medium text-gray-600 w-32">경비단가</th>
+                            </tr>
+                        </thead>
+                        <tbody id="price-editor-body" class="divide-y divide-gray-200">
+                            <!-- JS로 동적 생성됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t flex justify-end space-x-3 bg-gray-50 rounded-b-xl">
+                <button onclick="closePriceEditor()" class="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors">취소</button>
+                <button onclick="savePriceEditor()" id="btn-save-price" class="px-5 py-2.5 text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm font-medium transition-colors">DB에 변경사항 적용</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase 초기화 및 Auth 로직 -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwswFy6DMb8Bj6aLX03WPki1rlu1tpMMU",
+            authDomain: "rough-estimate-8011c.firebaseapp.com",
+            projectId: "rough-estimate-8011c",
+            storageBucket: "rough-estimate-8011c.firebasestorage.app",
+            messagingSenderId: "490570732759",
+            appId: "1:490570732759:web:1b64ff1ee21ce0e8318c92"
+        };
+        
+        // Firebase 앱, Firestore DB, Auth 초기화
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+        // UI 오버레이 컨트롤 헬퍼
+        function showLoading(title, subtext) {
+            const overlay = document.getElementById('loading-overlay');
+            document.getElementById('loading-text').innerText = title || "처리 중...";
+            document.getElementById('loading-subtext').innerText = subtext || "잠시만 기다려주세요.";
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 500);
+        }
+
+        // ==========================================
+        // 0. 구글 로그인 및 화이트리스트(권한) 체크
+        // ==========================================
+        function handleGoogleLogin() {
+            showLoading("구글 로그인 진행 중...", "계정 정보를 확인하고 있습니다.");
+
+            auth.signInWithPopup(googleProvider)
+                .then(async (result) => {
+                    const userEmail = result.user.email;
+                    document.getElementById('loading-text').innerText = "권한 확인 중...";
+                    document.getElementById('loading-subtext').innerText = "등록된 화이트리스트를 조회하고 있습니다.";
+
+                    try {
+                        // 화이트리스트 컬렉션에서 'id' 필드가 로그인한 이메일과 같은지 쿼리
+                        const whitelistRef = db.collection('white_list');
+                        const querySnapshot = await whitelistRef.where('id', '==', userEmail).get();
+
+                        if (querySnapshot.empty) {
+                            // 이메일이 화이트리스트에 없을 경우
+                            await auth.signOut();
+                            hideLoading();
+                            alert(`접근 권한이 없습니다.\n시스템에 등록되지 않은 계정입니다.\n(${userEmail})`);
+                        } else {
+                            // 권한이 있을 경우: 앱 컨테이너 열고 초기 데이터(내역서) 불러오기
+                            document.getElementById('login-container').classList.add('hidden');
+                            document.getElementById('app-container').classList.remove('hidden');
+                            loadEstimatorData();
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        await auth.signOut();
+                        hideLoading();
+                        alert("권한 정보를 확인하는 도중 오류가 발생했습니다.\n(Firebase 규칙이나 네트워크 상태를 확인해주세요.)");
+                    }
+                })
+                .catch((error) => {
+                    hideLoading();
+                    if (error.code !== 'auth/popup-closed-by-user') {
+                        alert("로그인에 실패했습니다: " + error.message);
+                    }
+                });
+        }
+
+        function handleLogout() {
+            if(confirm("정말로 로그아웃 하시겠습니까?")) {
+                auth.signOut().then(() => {
+                    location.reload(); // 새로고침하여 초기 로그인 화면으로 돌아감
+                });
+            }
+        }
+
+    </script>
+
+    <!-- 메인 비즈니스 로직 Script -->
+    <script>
+        const PYEONG_TO_M2 = 3.305785;
+        let currentStep = 1;
+        let boqItems = [];
+
+        // =========================================================================
+        // 1. 상세설정 변수 데이터베이스 
+        // =========================================================================
+        const detailConfig = [
+            { cat: '대지관련', id: 'VLA', name: '대지둘레(m)', default: 0, min: 100, calc: v => Math.sqrt(v.C * 1.3) * 4, hidden: false },
+            { cat: '대지관련', id: 'VLB', name: '지역지구', type: 'text', default: '', calc: null, hidden: false },
+            { cat: '대지관련', id: 'VLC', name: '조경면적', default: 0, min: 0, calc: null, hidden: true },
+            { cat: '대지관련', id: 'VLD', name: '주차대수', default: 0, min: 0, calc: null, hidden: true },
+            { cat: '대지관련', id: 'VLE', name: '도로너비', default: 0, min: 0, calc: null, hidden: true },
+            
+            { cat: '시공관련', id: 'VCA', name: '공사기간(개월)', default: 4, min: 4, calc: v => v.A <= 500 ? 4 : 4 + Math.floor(v.A / 500), hidden: false },
+            { cat: '시공관련', id: 'VCB', name: '이형건축물계수', default: 1, min: 1, calc: null, hidden: false },
+            { cat: '시공관련', id: 'VCC', name: '시공여건계수', default: 1, min: 1, calc: null, hidden: true },
+            { cat: '시공관련', id: 'VCD', name: '현장관리비율(%)', default: 0, min: 0, calc: null, hidden: true },
+            { cat: '시공관련', id: 'VCE', name: '안전관리비율(%)', default: 0, min: 0, calc: null, hidden: true },
+            
+            { cat: '건축물관련', id: 'VAA', name: '건축물장변(m)', default: 0, min: 0, calc: v => v.A <= 500 ? 15 : (v.A <= 1000 ? 20 : 25), hidden: false },
+            { cat: '건축물관련', id: 'VAB', name: '건축물단변(m)', default: 0, min: 0, calc: v => Math.round((v.B / (v.VAA || 15)) * 10) / 10, hidden: false }, 
+            { cat: '건축물관련', id: 'VAC', name: '건축물처마높이(m)', default: 2, min: 2, calc: v => v.E <= 3 ? 8 : 8 + (v.E - 3) * 3, hidden: false },
+            { cat: '건축물관련', id: 'VAD', name: '건축연평수(평)', default: 0, min: 0, calc: v => Math.floor(v.A * 0.3025), hidden: false },
+            { cat: '건축물관련', id: 'VAE', name: '건축물최고높이', default: 0, min: 0, calc: v => v.E * 4, hidden: false },
+            
+            { cat: '구조관련', id: 'VSA', name: '잡석지정(mm)', default: 300, min: 100, calc: null, hidden: false },
+            { cat: '구조관련', id: 'VSB', name: "기초Con'c(mm)", default: 400, min: 400, calc: null, hidden: false },
+            { cat: '구조관련', id: 'VSC', name: '데크슬래브두께(mm)', default: 200, min: 150, calc: null, hidden: false },
+            { cat: '구조관련', id: 'VSD', name: "버림Con'c(mm)", default: 60, min: 0, calc: null, hidden: false },
+            { cat: '구조관련', id: 'VSE', name: '철골중량비율(%)', default: 100, min: 0, calc: null, hidden: true },
+            { cat: '구조관련', id: 'VSF', name: '외벽두께(mm)', default: 200, min: 100, calc: null, hidden: true },
+
+            { cat: '설비관련', id: 'VFA', name: '남자화장실수(EA)', default: 0, min: 0, calc: v => v.E, hidden: false },
+            { cat: '설비관련', id: 'VFB', name: '여자화장실수(EA)', default: 0, min: 0, calc: v => v.E, hidden: false },
+            { cat: '설비관련', id: 'VFC', name: '화장실높이(m)', default: 0, min: 0, calc: v => v.E, hidden: false },
+            { cat: '설비관련', id: 'VFD', name: '화장실개소당면적(M2)', default: 9, min: 0, calc: null, hidden: false },
+            { cat: '설비관련', id: 'VMA', name: '냉난방기(식)', default: 0, min: 0, calc: null, hidden: false },
+            { cat: '설비관련', id: 'VMB', name: '환기설비(식)', default: 0, min: 0, calc: null, hidden: false },
+            { cat: '설비관련', id: 'VMC', name: '소방설비(식)', default: 0, min: 0, calc: null, hidden: false },
+            { cat: '설비관련', id: 'VMD', name: '승강기(대)', default: 0, min: 0, calc: null, hidden: false },
+            
+            { cat: '창호관련', id: 'VWA', name: 'PL창호갯수(EA)', default: 0, min: 0, calc: v => Math.floor((v.VAA||0)/4.5)*2*3 - 2 + Math.floor((v.VAB||0)/4.5)*2*3 - 2, hidden: false },
+            { cat: '창호관련', id: 'VWB', name: 'AL창호갯수(EA)', default: 0, min: 0, calc: null, hidden: false },
+            { cat: '창호관련', id: 'VWC', name: '행거도어갯수(EA)', default: 0, min: 0, calc: v => 1 + Math.floor((v.VAA||0)/20 + 1), hidden: false },
+            { cat: '창호관련', id: 'VWD', name: '단열SD도어갯수(EA)', default: 1, min: 1, calc: null, hidden: false },
+            { cat: '창호관련', id: 'VWE', name: '일반SD도어갯수(EA)', default: 0, min: 0, calc: v => (v.VFA||0) + (v.VFB||0), hidden: false },
+
+            { cat: '토목관련', id: 'VTA', name: '토목공사 면적(m²)', default: 0, min: 0, calc: v => Math.max(0, v.C - v.B), hidden: false },
+            { cat: '토목관련', id: 'VTB', name: '옹벽길이(m)', default: 0, min: 0, calc: null, hidden: false },
+            { cat: '토목관련', id: 'VTC', name: '옹벽높이(m)', default: 0, min: 0, calc: null, hidden: false },
+            { cat: '토목관련', id: 'VTD', name: '우수관로(m)', default: 0, min: 0, calc: null, hidden: false },
+            { cat: '토목관련', id: 'VTE', name: '오수관로(m)', default: 0, min: 0, calc: null, hidden: false },
+
+            { cat: '물량관련', id: 'VEA', name: '레미콘27(M3)', default: 0, min: 0, calc: v => Math.floor(0.4202*v.B) + Math.floor(0.441*((v.VAA||0)+(v.VAB||0))*2) + Math.floor((v.E-1)*v.B*0.21), hidden: true },
+            { cat: '물량관련', id: 'VEB', name: '레미콘18(M3)', default: 0, min: 0, calc: v => Math.floor(0.6464*v.B), hidden: true },
+            { cat: '물량관련', id: 'VEC', name: '철근13(KG)', default: 0, min: 0, calc: v => Math.floor(18.839*v.B) + Math.floor(13.853*((v.VAA||0)+(v.VAB||0))*2) + Math.floor((v.E-1)*v.B*9.419), hidden: true },
+            { cat: '물량관련', id: 'VED', name: '철근16(KG)', default: 0, min: 0, calc: v => Math.floor(0.0254*((v.VAA||0)+(v.VAB||0))*2), hidden: true },
+            { cat: '물량관련', id: 'VEE', name: '유로폼량(M2)', default: 0, min: 0, calc: v => Math.floor(((v.VAA||0)+(v.VAB||0))*2*1.2*1.05), hidden: true },
+            { cat: '물량관련', id: 'VEF', name: '전체강재량(KG)', default: 0, min: 0, calc: v => Math.floor(81.17291313*v.B), hidden: true },
+            { cat: '물량관련', id: 'VEG', name: '전체판넬량(KG)', default: 0, min: 0, calc: v => Math.floor(((v.VAA||0)+(v.VAB||0))*2*(v.VAC||0)*1.265) + Math.floor(v.B*1.1), hidden: true }
+        ];
+
+        // =========================================================================
+        // 2. 수량 매핑 데이터베이스
+        // =========================================================================
+        const qtyMapping = [
+            { "일련번호": "ZA0001", calc: v => Math.floor(v.VCA/6+1) },
+            { "일련번호": "ZA0002", calc: v => v.VLA },
+            { "일련번호": "ZA0003", calc: v => v.VCA },
+            { "일련번호": "ZA0004", calc: v => v.VCA },
+            { "일련번호": "ZA0005", calc: v => v.D },
+            { "일련번호": "ZA0006", calc: v => v.D },
+            { "일련번호": "ZA0007", calc: v => v.D },
+            { "일련번호": "ZA0008", calc: v => Math.floor(v.A/500+1)*4 },
+            { "일련번호": "ZA0009", calc: v => v.A },
+            { "일련번호": "ZA0010", calc: v => v.A },
+            { "일련번호": "ZA0011", calc: v => v.A },
+            { "일련번호": "ZA0012", calc: v => v.A },
+            { "일련번호": "ZB0001", calc: v => Math.floor(v.B/500+1)*3 },
+            { "일련번호": "ZB0002", calc: v => Math.floor(v.B/500+1)*2 },
+            { "일련번호": "ZB0003", calc: v => Math.floor(v.B/500+1)*4 },
+            { "일련번호": "ZB0004", calc: v => v.B },
+            { "일련번호": "ZB0005", calc: v => Math.floor(v.B*v.VSA/1000*1.05) },
+            { "일련번호": "ZC0001", calc: v => v.VEA },
+            { "일련번호": "ZC0002", calc: v => v.VEB },
+            { "일련번호": "ZC0003", calc: v => v.VEC },
+            { "일련번호": "ZC0004", calc: v => v.VED },
+            { "일련번호": "ZC0005", calc: v => v.VEC+v.VED },
+            { "일련번호": "ZC0006", calc: v => v.VEE },
+            { "일련번호": "ZC0007", calc: v => v.VEE },
+            { "일련번호": "ZC0008", calc: v => v.VEE },
+            { "일련번호": "ZC0009", calc: v => 1+Math.floor(v.VEA/180+1) },
+            { "일련번호": "ZD0001", calc: v => Math.floor(19.776*v.B) },
+            { "일련번호": "ZD0002", calc: v => Math.floor(28.16582*v.B) },
+            { "일련번호": "ZD0003", calc: v => Math.floor(5.040133*v.B) },
+            { "일련번호": "ZD0004", calc: v => Math.floor(5.4234*v.B) },
+            { "일련번호": "ZD0005", calc: v => Math.floor(6.0976*v.B) },
+            { "일련번호": "ZD0006", calc: v => Math.floor(9.967903*v.B) },
+            { "일련번호": "ZD0007", calc: v => Math.floor(1.24016*v.B) },
+            { "일련번호": "ZD0008", calc: v => Math.floor(0.460606*v.B) },
+            { "일련번호": "ZD0009", calc: v => Math.floor(5.00127*v.B) },
+            { "일련번호": "ZD0010", calc: v => Math.floor(v.VEF*0.2) },
+            { "일련번호": "ZD0011", calc: v => Math.floor(v.VEF*0.1) },
+            { "일련번호": "ZD0012", calc: v => v.VEF },
+            { "일련번호": "ZD0013", calc: v => v.VEF },
+            { "일련번호": "ZD0014", calc: v => v.VEF },
+            { "일련번호": "ZD0015", calc: v => v.VEF },
+            { "일련번호": "ZD0016", calc: v => v.VEF },
+            { "일련번호": "ZD0017", calc: v => v.VEF },
+            { "일련번호": "ZD0018", calc: v => v.VEF },
+            { "일련번호": "ZE0001", calc: v => Math.floor(((v.VAA+v.VAB)*2*v.VAC)*1.1) },
+            { "일련번호": "ZE0002", calc: v => Math.floor(((v.VAA+v.VAB)*2*v.VAC)*0.165) },
+            { "일련번호": "ZE0003", calc: v => Math.floor(v.B*1.1) },
+            { "일련번호": "ZE0004", calc: v => v.VEG },
+            { "일련번호": "ZE0005", calc: v => v.VEG },
+            { "일련번호": "ZE0006", calc: v => v.VEG },
+            { "일련번호": "ZE0007", calc: v => v.VEG },
+            { "일련번호": "ZE0008", calc: v => v.VEG },
+            { "일련번호": "ZF0001", calc: v => v.VWA },
+            { "일련번호": "ZF0002", calc: v => v.VFA+v.VFB },
+            { "일련번호": "ZF0003", calc: v => v.VWD },
+            { "일련번호": "ZF0004", calc: v => v.VWE },
+            { "일련번호": "ZF0005", calc: v => v.VWC },
+            { "일련번호": "ZF0006", calc: v => Math.floor(v.VAA/5+1)*v.VAC },
+            { "일련번호": "ZG0001", calc: v => v.A },
+            { "일련번호": "ZG0002", calc: v => v.B },
+            { "일련번호": "ZG0003", calc: v => v.A },
+            { "일련번호": "ZH0001", calc: v => Math.floor(v.VFD*(v.VFA+v.VFB)) },
+            { "일련번호": "ZH0002", calc: v => Math.floor(v.VFC*Math.sqrt(v.VFD)*4*(v.VFA+v.VFB)) },
+            { "일련번호": "ZH0003", calc: v => Math.floor(v.VFC*Math.sqrt(v.VFD)*4*(v.VFA+v.VFB))+Math.floor(v.VFD*(v.VFA+v.VFB)) },
+            { "일련번호": "ZH0004", calc: v => Math.floor(v.VFD*(v.VFA+v.VFB)) },
+            { "일련번호": "ZH0005", calc: v => Math.floor(20*(v.VFA+v.VFB)) },
+            { "일련번호": "ZH0006", calc: v => Math.floor(v.VFD*(v.VFA+v.VFB)) },
+            { "일련번호": "ZH0007", calc: v => Math.floor(6*(v.VFA+v.VFB)) },
+            { "일련번호": "ZH0008", calc: v => Math.floor(v.VFA+v.VFB*2) },
+            { "일련번호": "ZH0009", calc: v => Math.floor(v.VFA*1) },
+            { "일련번호": "ZH0010", calc: v => Math.floor(v.VFA+v.VFB) },
+            { "일련번호": "ZH0011", calc: v => Math.floor(v.VFA+v.VFB) },
+            { "일련번호": "ZH0012", calc: v => Math.floor(v.VFA+v.VFB) },
+            { "일련번호": "ZH0013", calc: v => Math.floor(v.VFA+v.VFB) },
+            { "일련번호": "ZI0001", calc: v => Math.floor(v.A/500)*25 },
+            { "일련번호": "ZI0002", calc: v => Math.floor(v.A/500)*5 },
+            { "일련번호": "ZJ0001", calc: v => v.VTA },
+            { "일련번호": "ZJ0002", calc: v => v.VTA },
+            { "일련번호": "ZK0001", calc: v => v.VAD }
+        ];
+
+        // -------------------------------------------------------------------------
+        // 3. Firestore 데이터 호출 (로그인 검증 성공 후 실행됨)
+        // -------------------------------------------------------------------------
+        function getRaw(item, keys) {
+            for (let k of keys) {
+                if (item[k] !== undefined && item[k] !== null) return item[k];
+            }
+            return '';
+        }
+
+        async function loadEstimatorData() {
+            renderStep2DynamicUI();
+            
+            let isLoaded = false;
+            
+            // 10초 무한 로딩 대비 디버깅 타이머
+            const fallbackTimer = setTimeout(() => {
+                if (!isLoaded) {
+                    showDebugError("10초 시간 초과 (Timeout) - Firestore 서버로부터 응답이 없습니다.<br><br>가능성 1: 인터넷 연결 불안정<br>가능성 2: Firestore Database 규칙 오류");
+                }
+            }, 10000);
+
+            try {
+                document.getElementById('loading-text').innerText = "견적 데이터 로딩 중...";
+                document.getElementById('loading-subtext').innerText = "단가표를 동기화하고 있습니다.";
+                showLoading("견적 데이터 로딩 중...", "단가표를 동기화하고 있습니다.");
+
+                const snapshot = await db.collection('standard_costs').get();
+                
+                isLoaded = true;
+                clearTimeout(fallbackTimer);
+                
+                if (!snapshot.empty) {
+                    const data = snapshot.docs.map(doc => {
+                        return { fbKey: doc.id, ...doc.data() };
+                    });
+                    processFirebaseData(data);
+                    hideLoading();
+                } else {
+                    throw new Error("Firestore의 'standard_costs' 컬렉션에 데이터가 없습니다.");
+                }
+            } catch(e) {
+                isLoaded = true;
+                clearTimeout(fallbackTimer);
+                showDebugError("Firestore 연동 오류: " + e.message + "<br><br>권한 오류(Permission Denied)인 경우 Firestore의 '규칙(Rules)' 탭을 확인해주세요.");
+            }
+        }
+
+        // 에러 발생 시 화면에 디버깅창 표시
+        function showDebugError(errMsg) {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.className = "fixed inset-0 z-[100] bg-gray-900 bg-opacity-75 flex flex-col items-center justify-center p-4 transition-opacity duration-500";
+                overlay.innerHTML = `
+                    <div class="bg-white p-6 rounded-xl shadow-2xl max-w-2xl w-full border-t-4 border-red-500">
+                        <div class="flex items-center mb-4">
+                            <i class="fas fa-exclamation-triangle text-3xl text-red-500 mr-3"></i>
+                            <h3 class="text-xl font-bold text-gray-900">시스템 오류 (디버깅 정보)</h3>
+                        </div>
+                        <div class="bg-gray-100 p-4 rounded-lg text-left text-sm text-red-600 font-mono overflow-auto max-h-40 mb-5 border border-gray-200">
+                            ${errMsg}
+                        </div>
+                        <div class="flex justify-end space-x-3">
+                            <button onclick="document.getElementById('loading-overlay').remove()" class="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 rounded-lg text-gray-800 font-medium transition-colors">무시하고 강제 시작</button>
+                            <button onclick="location.reload()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors">새로고침</button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Firestore 데이터를 boqItems에 매핑
+        function processFirebaseData(data) {
+            boqItems = data.map(item => {
+                const serial = getRaw(item, ["일련번호", " 일련번호 "]);
+                
+                // 수량 매핑
+                const mapData = qtyMapping.find(q => q["일련번호"] === serial);
+                const qtyFn = mapData ? mapData.calc : () => 0;
+
+                // 단가 텍스트 포맷 처리 (콤마 제거, - 표기 0으로 치환 등)
+                const matVal = getRaw(item, ["재료비단가", " 재료비단가 "]).toString().replace(/,/g, '').replace(/-/g, '0');
+                const labVal = getRaw(item, ["노무비단가", " 노무비단가 "]).toString().replace(/,/g, '').replace(/-/g, '0');
+                const expVal = getRaw(item, ["경비단가", " 경비단가 "]).toString().replace(/,/g, '').replace(/-/g, '0');
+                
+                // 이형건축물계수 유무 파악
+                const vcbField = getRaw(item, ["이형건축물계수적용", " 이형건축물계수적용 "]);
+                const applyVCB = vcbField && vcbField.toString().trim() !== '' && vcbField.toString().trim() !== 'null';
+
+                // 원본 Firebase 필드명 추적
+                const originalMatKey = Object.keys(item).find(k => k.trim() === "재료비단가") || " 재료비단가 ";
+                const originalLabKey = Object.keys(item).find(k => k.trim() === "노무비단가") || " 노무비단가 ";
+                const originalExpKey = Object.keys(item).find(k => k.trim() === "경비단가") || " 경비단가 ";
+
+                return {
+                    cat: getRaw(item, ["공종", " 공종 "]) || '',
+                    name: getRaw(item, ["품명", " 품명 "]) || '',
+                    spec: getRaw(item, ["규격", " 규격 "]) || '',
+                    unit: getRaw(item, ["단위", " 단위 "]) || '',
+                    qtyFn: qtyFn,
+                    mat: parseFloat(matVal) || 0,
+                    lab: parseFloat(labVal) || 0,
+                    exp: parseFloat(expVal) || 0,
+                    applyVCB: applyVCB,
+                    serial: serial,
+                    fbKey: item.fbKey, 
+                    originalMatKey: originalMatKey,
+                    originalLabKey: originalLabKey,
+                    originalExpKey: originalExpKey
+                };
+            });
+
+            // 내역서를 '일련번호' 순서대로 정렬
+            boqItems.sort((a, b) => a.serial.localeCompare(b.serial));
+        }
+
+        // -------------------------------------------------------------------------
+        // 기타 UI 유틸 및 로직
+        // -------------------------------------------------------------------------
+
+        function parseNameAndUnit(rawName) {
+            const match = rawName.match(/^(.*?)(?:\((.*?)\))?$/);
+            return {
+                displayName: match ? match[1].trim() : rawName,
+                unit: (match && match[2]) ? match[2].trim() : ''
+            };
+        }
+
+        function renderStep2DynamicUI() {
+            const tabsContainer = document.getElementById('dynamic-tabs-container');
+            const contentsContainer = document.getElementById('dynamic-tab-contents');
+            
+            tabsContainer.innerHTML = '';
+            contentsContainer.innerHTML = '';
+            
+            const orderedCategories = ["대지관련", "시공관련", "건축물관련", "구조관련", "설비관련", "창호관련", "토목관련"];
+            const visibleItems = detailConfig.filter(c => !c.hidden);
+            const categoriesToRender = orderedCategories.filter(cat => visibleItems.some(item => item.cat === cat));
+
+            categoriesToRender.forEach((cat, index) => {
+                const tabId = `cat-tab-${index}`;
+                
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = index === 0 ? "tab-active whitespace-nowrap py-4 px-1 text-sm font-medium transition-colors" : "tab-inactive whitespace-nowrap py-4 px-1 text-sm font-medium transition-colors";
+                btn.innerText = cat;
+                btn.id = `btn-${tabId}`;
+                btn.onclick = () => switchDynamicTab(index, categoriesToRender.length);
+                tabsContainer.appendChild(btn);
+
+                const content = document.createElement('div');
+                content.id = `content-${tabId}`;
+                content.className = index === 0 ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden";
+
+                const items = visibleItems.filter(c => c.cat === cat);
+                items.forEach(item => {
+                    const inputType = item.type || 'number';
+                    const { displayName, unit } = parseNameAndUnit(item.name || '');
+                    
+                    content.innerHTML += `
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">${displayName} <span class="text-xs text-gray-400 font-normal">(${item.id})</span></label>
+                            <div class="relative">
+                                <input type="${inputType}" id="input_${item.id}" ${inputType === 'number' ? `step="0.01"` : ''} class="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white border text-right shadow-sm">
+                                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-500 sm:text-sm">${unit}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                contentsContainer.appendChild(content);
+            });
+        }
+
+        function switchDynamicTab(activeIndex, totalTabs) {
+            for (let i = 0; i < totalTabs; i++) {
+                const btn = document.getElementById(`btn-cat-tab-${i}`);
+                const content = document.getElementById(`content-cat-tab-${i}`);
+                if (btn && content) {
+                    if (i === activeIndex) {
+                        btn.className = "tab-active whitespace-nowrap py-4 px-1 text-sm font-medium transition-colors";
+                        content.classList.remove('hidden');
+                    } else {
+                        btn.className = "tab-inactive whitespace-nowrap py-4 px-1 text-sm font-medium transition-colors";
+                        content.classList.add('hidden');
+                    }
+                }
+            }
+        }
+
+        function calculateArea(type) {
+            const inputElem = document.getElementById(type + 'Area');
+            const unitElem = document.getElementById(type + 'Unit');
+            const resultElem = document.getElementById(type + 'Result');
+            const val = parseFloat(inputElem.value);
+            const isPy = unitElem.value === 'py';
+            
+            if (isNaN(val)) {
+                resultElem.innerHTML = isPy ? '= 0.00 m&sup2;' : '= 0.00 평';
+                return;
+            }
+            if (isPy) {
+                resultElem.innerHTML = `= ${(val * PYEONG_TO_M2).toFixed(2)} m&sup2;`;
+            } else {
+                resultElem.innerHTML = `= ${(val / PYEONG_TO_M2).toFixed(2)} 평`;
+            }
+        }
+
+        function getM2Value(type) {
+            const inputElem = document.getElementById(type + 'Area');
+            const unitElem = document.getElementById(type + 'Unit');
+            const val = parseFloat(inputElem.value);
+            if (isNaN(val)) return 0;
+            return unitElem.value === 'py' ? val * PYEONG_TO_M2 : val;
+        }
+
+        function calculateStep2Defaults() {
+            let v = {
+                A: getM2Value('total'),
+                B: getM2Value('build'),
+                C: getM2Value('site'),
+                D: parseInt(document.getElementById('buildingCount').value) || 1,
+                E: parseInt(document.getElementById('floorCount').value) || 1,
+                F: document.getElementById('mainUse').value
+            };
+
+            detailConfig.forEach(item => {
+                let val = item.default || 0;
+                if (item.type === 'text') val = '';
+                
+                if (item.calc) {
+                    val = item.calc(v);
+                    if (Number.isNaN(val)) val = 0;
+                }
+                
+                if (item.type !== 'text' && item.min !== undefined) {
+                    val = Math.max(val, item.min);
+                }
+                
+                v[item.id] = val;
+
+                if (!item.hidden) {
+                    const inputElem = document.getElementById(`input_${item.id}`);
+                    if (inputElem) {
+                        inputElem.value = (item.type === 'text') ? val : (Number.isInteger(val) ? val : val.toFixed(2));
+                    }
+                }
+            });
+        }
+
+        function generateEstimate() {
+            let v = {
+                A: getM2Value('total'),
+                B: getM2Value('build'),
+                C: getM2Value('site'),
+                D: parseInt(document.getElementById('buildingCount').value) || 1,
+                E: parseInt(document.getElementById('floorCount').value) || 1,
+                F: document.getElementById('mainUse').value
+            };
+
+            detailConfig.forEach(item => {
+                if (!item.hidden) {
+                    const inputElem = document.getElementById(`input_${item.id}`);
+                    if (inputElem) {
+                        if (item.type === 'text') {
+                            v[item.id] = inputElem.value || '';
+                        } else {
+                            const parsed = parseFloat(inputElem.value);
+                            v[item.id] = isNaN(parsed) ? (item.default || 0) : parsed;
+                        }
+                    }
+                } else {
+                    let val = item.default || 0;
+                    if (item.calc) {
+                        val = item.calc(v);
+                        if (Number.isNaN(val)) val = 0;
+                    }
+                    v[item.id] = val;
+                }
+            });
+
+            const tbody = document.getElementById('estimate-table-body');
+            tbody.innerHTML = '';
+            let grandTotal = 0;
+
+            const boqCategories = ["전체", ...new Set(boqItems.map(item => item.cat))];
+            renderStep3Tabs(boqCategories);
+
+            boqItems.forEach(item => {
+                let rawQty = item.qtyFn ? item.qtyFn(v) : 0;
+                if (Number.isNaN(rawQty)) rawQty = 0;
+                rawQty = Math.floor(rawQty); 
+                
+                if (item.applyVCB && v.VCB) {
+                    rawQty = Math.floor(rawQty * v.VCB);
+                }
+
+                const qty = Math.max(0, rawQty);
+
+                const matTotal = qty * item.mat;
+                const labTotal = qty * item.lab;
+                const expTotal = qty * item.exp;
+                const unitTotal = item.mat + item.lab + item.exp;
+                const rowTotal = matTotal + labTotal + expTotal;
+                
+                grandTotal += rowTotal;
+
+                const f = (num) => Math.round(num).toLocaleString();
+
+                const tr = document.createElement('tr');
+                tr.className = "boq-row hover:bg-gray-50 transition-colors";
+                tr.setAttribute('data-cat', item.cat); 
+                tr.innerHTML = `
+                    <td class="px-3 py-2 border-r text-gray-900">${item.cat}</td>
+                    <td class="px-3 py-2 border-r text-gray-900 font-medium">${item.name}</td>
+                    <td class="px-3 py-2 border-r text-gray-500 text-xs">${item.spec}</td>
+                    <td class="px-2 py-2 border-r text-center text-gray-500">${item.unit}</td>
+                    <td class="px-3 py-2 border-r text-right font-semibold text-blue-600 bg-blue-50/50">${f(qty)}</td>
+                    <td class="px-3 py-2 border-r text-right text-gray-500">${f(item.mat)}</td>
+                    <td class="px-3 py-2 border-r text-right text-gray-800">${f(matTotal)}</td>
+                    <td class="px-3 py-2 border-r text-right text-gray-500">${f(item.lab)}</td>
+                    <td class="px-3 py-2 border-r text-right text-gray-800">${f(labTotal)}</td>
+                    <td class="px-3 py-2 border-r text-right text-gray-500">${f(item.exp)}</td>
+                    <td class="px-3 py-2 border-r text-right text-gray-800">${f(expTotal)}</td>
+                    <td class="px-3 py-2 border-r text-right font-medium text-gray-500">${f(unitTotal)}</td>
+                    <td class="px-3 py-2 border-r text-right font-bold text-gray-900 bg-gray-50">${f(rowTotal)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('total-price-display').innerText = Math.round(grandTotal).toLocaleString() + ' 원';
+
+            const pyeongArea = v.A / PYEONG_TO_M2;
+            const pyeongPrice = pyeongArea > 0 ? grandTotal / pyeongArea : 0;
+            document.getElementById('pyeong-price-display').innerText = `(평당: ${Math.round(pyeongPrice).toLocaleString()} 원)`;
+        }
+
+        function renderStep3Tabs(categories) {
+            const container = document.getElementById('step3-tabs-container');
+            container.innerHTML = '';
+            
+            categories.forEach((cat, index) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = index === 0 
+                    ? "step3-tab-active whitespace-nowrap py-3 px-1 text-sm font-bold transition-colors border-b-2 border-blue-600 text-blue-600" 
+                    : "step3-tab-inactive whitespace-nowrap py-3 px-1 text-sm font-medium transition-colors border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
+                btn.innerText = cat;
+                btn.onclick = (e) => switchStep3Tab(e.target, cat);
+                container.appendChild(btn);
+            });
+        }
+
+        function switchStep3Tab(clickedBtn, targetCat) {
+            const tabs = document.getElementById('step3-tabs-container').children;
+            for (let btn of tabs) {
+                btn.className = "step3-tab-inactive whitespace-nowrap py-3 px-1 text-sm font-medium transition-colors border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
+            }
+            clickedBtn.className = "step3-tab-active whitespace-nowrap py-3 px-1 text-sm font-bold transition-colors border-b-2 border-blue-600 text-blue-600";
+
+            const rows = document.querySelectorAll('.boq-row');
+            rows.forEach(row => {
+                if (targetCat === "전체" || row.getAttribute('data-cat') === targetCat) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        function updateStepperUI(step) {
+            const icons = document.querySelectorAll('nav ol li span.h-10');
+            const texts = document.querySelectorAll('nav ol li span.mt-2');
+            
+            icons.forEach((icon, idx) => {
+                if (idx + 1 <= step) {
+                    icon.className = "h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center ring-4 ring-white shadow text-white font-bold z-10";
+                    texts[idx].className = "mt-2 text-sm font-semibold text-blue-600";
+                } else {
+                    icon.className = "h-10 w-10 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center ring-4 ring-white shadow text-gray-500 font-bold z-10";
+                    texts[idx].className = "mt-2 text-sm font-medium text-gray-500";
+                }
+            });
+
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            const mainContainer = document.getElementById('main-container');
+
+            if (step === 1) {
+                btnPrev.classList.add('invisible');
+                btnNext.innerHTML = '상세 설정으로 이동 <i class="fas fa-arrow-right ml-2"></i>';
+                mainContainer.className = "bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 max-w-5xl mx-auto";
+            } else if (step === 2) {
+                btnPrev.classList.remove('invisible');
+                btnNext.innerHTML = '견적 산출하기 <i class="fas fa-arrow-right ml-2"></i>';
+                mainContainer.className = "bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 max-w-5xl mx-auto";
+            } else if (step === 3) {
+                btnPrev.classList.remove('invisible');
+                btnNext.innerHTML = '결과 출력하기 <i class="fas fa-file-invoice ml-2"></i>';
+                mainContainer.className = "bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 max-w-7xl mx-auto";
+            }
+        }
+
+        function nextStep() {
+            if (currentStep === 1) {
+                calculateStep2Defaults();
+                document.getElementById('step-1').classList.add('hidden');
+                document.getElementById('step-2').classList.remove('hidden');
+                currentStep = 2;
+                updateStepperUI(currentStep);
+            } else if (currentStep === 2) {
+                generateEstimate();
+                document.getElementById('step-2').classList.add('hidden');
+                document.getElementById('step-3').classList.remove('hidden');
+                currentStep = 3;
+                updateStepperUI(currentStep);
+            } else if (currentStep === 3) {
+                alert("견적 산출이 완료되었습니다. 다음 단계(제안서/견적서 출력) 기능을 연동할 수 있습니다.");
+            }
+        }
+
+        function prevStep() {
+            if (currentStep === 2) {
+                document.getElementById('step-2').classList.add('hidden');
+                document.getElementById('step-1').classList.remove('hidden');
+                currentStep = 1;
+                updateStepperUI(currentStep);
+            } else if (currentStep === 3) {
+                document.getElementById('step-3').classList.add('hidden');
+                document.getElementById('step-2').classList.remove('hidden');
+                currentStep = 2;
+                updateStepperUI(currentStep);
+            }
+        }
+
+        function openPriceEditor() {
+            const tbody = document.getElementById('price-editor-body');
+            tbody.innerHTML = '';
+            
+            boqItems.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-blue-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="px-3 py-2 border-r text-gray-500 whitespace-nowrap">${item.cat}</td>
+                    <td class="px-3 py-2 border-r text-gray-900 font-medium whitespace-nowrap">${item.name} <span class="text-xs text-gray-400 font-normal ml-1">(${item.spec || '-'})</span></td>
+                    <td class="px-2 py-2 border-r text-center text-gray-500">${item.unit}</td>
+                    <td class="px-3 py-2 border-r text-right bg-white">
+                        <input type="number" id="edit_mat_${index}" value="${item.mat}" min="0" step="1" class="w-full text-right border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 px-2 py-1.5 shadow-sm text-sm">
+                    </td>
+                    <td class="px-3 py-2 border-r text-right bg-white">
+                        <input type="number" id="edit_lab_${index}" value="${item.lab}" min="0" step="1" class="w-full text-right border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 px-2 py-1.5 shadow-sm text-sm">
+                    </td>
+                    <td class="px-3 py-2 text-right bg-white">
+                        <input type="number" id="edit_exp_${index}" value="${item.exp}" min="0" step="1" class="w-full text-right border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 px-2 py-1.5 shadow-sm text-sm">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('price-modal').classList.remove('hidden');
+        }
+
+        function closePriceEditor() {
+            document.getElementById('price-modal').classList.add('hidden');
+        }
+
+        async function savePriceEditor() {
+            const btnSave = document.getElementById('btn-save-price');
+            btnSave.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> 저장 중...';
+            btnSave.disabled = true;
+
+            try {
+                const updatePromises = boqItems.map((item, index) => {
+                    item.mat = parseFloat(document.getElementById(`edit_mat_${index}`).value) || 0;
+                    item.lab = parseFloat(document.getElementById(`edit_lab_${index}`).value) || 0;
+                    item.exp = parseFloat(document.getElementById(`edit_exp_${index}`).value) || 0;
+
+                    if (item.fbKey) {
+                        const updateData = {};
+                        updateData[item.originalMatKey] = String(item.mat);
+                        updateData[item.originalLabKey] = String(item.lab);
+                        updateData[item.originalExpKey] = String(item.exp);
+                        return db.collection('standard_costs').doc(item.fbKey).update(updateData);
+                    }
+                    return Promise.resolve();
+                });
+
+                await Promise.all(updatePromises);
+                
+                closePriceEditor();
+                
+                const toast = document.createElement('div');
+                toast.className = "fixed bottom-10 right-10 bg-gray-800 text-white px-6 py-4 rounded-lg shadow-xl z-50 flex items-center transition-opacity duration-300";
+                toast.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-3 text-xl"></i> <div><p class="font-bold">단가 수정 완료</p><p class="text-xs text-gray-300">Firestore에 안전하게 저장되어 즉시 적용됩니다.</p></div>';
+                document.body.appendChild(toast);
+                
+                setTimeout(() => {
+                    toast.classList.add('opacity-0');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+                
+            } catch (error) {
+                console.error("Firestore Update Failed: ", error);
+                alert("단가를 저장하는 도중 오류가 발생했습니다. 개발자 도구를 확인해 주세요.");
+            } finally {
+                btnSave.innerHTML = 'DB에 변경사항 적용';
+                btnSave.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

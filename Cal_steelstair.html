@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>철제계단 제작 비용 산출기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- 엑셀 출력을 위한 SheetJS 추가 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* Chrome, Safari, Edge, Opera */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+
+    <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        <!-- 상단 데이터 제어 버튼 (JSON, 엑셀) -->
+        <div class="flex flex-wrap gap-3 justify-end mb-4">
+            <button onclick="document.getElementById('jsonFileInput').click()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow transition flex items-center">
+                <i class="fa-solid fa-folder-open mr-2"></i>JSON 불러오기
+            </button>
+            <input type="file" id="jsonFileInput" accept=".json" class="hidden" onchange="loadJSON(event)">
+            
+            <button onclick="saveJSON()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow transition flex items-center">
+                <i class="fa-solid fa-save mr-2"></i>JSON 저장하기
+            </button>
+            
+            <button onclick="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow transition flex items-center">
+                <i class="fa-solid fa-file-excel mr-2"></i>엑셀 출력하기
+            </button>
+        </div>
+
+        <header class="mb-8 text-center sm:text-left">
+            <h1 class="text-3xl font-bold text-gray-900"><i class="fa-solid fa-stairs text-blue-600 mr-2"></i>철제계단 단순계산기</h1>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- 왼쪽: 입력 폼 -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- 1. 계단 형태 및 치수 -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-xl font-bold mb-4 text-blue-700 border-b pb-2"><i class="fa-solid fa-ruler-combined mr-2"></i>1. 계단 형태 및 치수 (Geometry)</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">층고 (수직 총 높이)</label>
+                            <div class="relative">
+                                <input type="number" id="height" value="3000" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">mm</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">계단 폭</label>
+                            <div class="relative">
+                                <input type="number" id="width" value="1000" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">mm</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">디딤판 너비 (한 단의 폭)</label>
+                            <div class="relative">
+                                <input type="number" id="tread" value="280" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">mm</span>
+                            </div>
+                            <p id="treadInfo" class="text-xs mt-1 text-right"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">계단 단수</label>
+                            <div class="relative">
+                                <input type="number" id="steps" value="15" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">개</span>
+                            </div>
+                            <p id="stepHeightInfo" class="text-xs text-red-500 mt-1 text-right"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">계단참(오도리바) 개수</label>
+                            <div class="relative">
+                                <input type="number" id="landingCount" value="1" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">개</span>
+                            </div>
+                            <span class="block text-xs text-blue-600 mt-1 font-bold">*계단참 너비는 [계단폭×2]로 자동 계산됩니다. 단면도상 갯수로 표기하세요.</span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">계단참 길이 (1개당)</label>
+                            <div class="relative">
+                                <input type="number" id="landingLength" value="1200" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">mm</span>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2 pt-2 border-t border-gray-100 mt-2">
+                            <label class="flex items-center space-x-2 text-sm font-bold text-gray-800 cursor-pointer w-fit">
+                                <input type="checkbox" id="includeRiser" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 calc-input">
+                                <span>챌판(수직면) 무늬철판 마감 포함</span>
+                            </label>
+                            <p class="text-xs text-gray-500 mt-1">*체크 시 챌판 총 면적(계단폭 × 층고)이 철판 물량에 자동 추가됩니다.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 자재 단가 -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-xl font-bold mb-4 text-blue-700 border-b pb-2"><i class="fa-solid fa-cubes mr-2"></i>2. 자재 규격 및 단가 (Materials)</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
+                        <!-- ㄷ형강 -->
+                        <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                            <label class="block text-sm font-bold text-gray-800 mb-2">옆마감 (ㄷ형강)</label>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">단위 중량 (100x50x5t 기준 9.36)</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.01" id="weightChannel" value="9.36" class="w-full pl-2 pr-12 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right text-sm calc-input">
+                                        <span class="absolute right-2 top-1.5 text-xs text-gray-500">kg/m</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Kg당 단가</label>
+                                    <div class="relative">
+                                        <input type="number" id="priceChannelKg" value="900" class="w-full pl-2 pr-12 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right text-sm calc-input">
+                                        <span class="absolute right-2 top-1.5 text-xs text-gray-500">원/kg</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 무늬철판 -->
+                        <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                            <label class="block text-sm font-bold text-gray-800 mb-2">디딤판 (무늬철판)</label>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">철판 두께 (T)</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="thickPlate" value="3.2" class="w-full pl-2 pr-14 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right text-sm calc-input">
+                                        <span class="absolute right-2 top-1.5 text-xs text-gray-500">T (mm)</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Kg당 단가</label>
+                                    <div class="relative">
+                                        <input type="number" id="pricePlateKg" value="940" class="w-full pl-2 pr-12 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right text-sm calc-input">
+                                        <span class="absolute right-2 top-1.5 text-xs text-gray-500">원/kg</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">자재 로스율(할증) - 절단 손실 감안</label>
+                            <div class="relative w-full md:w-1/2">
+                                <input type="number" id="lossRate" value="10" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 평철 핸드레일 -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-xl font-bold mb-4 text-blue-700 border-b pb-2 flex justify-between items-center">
+                        <span><i class="fa-solid fa-bars mr-2"></i>3. 평철 핸드레일 (Handrail)</span>
+                        <label class="flex items-center space-x-2 text-sm text-gray-800 cursor-pointer">
+                            <input type="checkbox" id="includeHandrail" checked class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 calc-input">
+                            <span>평철 난간 포함</span>
+                        </label>
+                    </h2>
+                    
+                    <div id="handrailSettings" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- 규격 및 단가 -->
+                        <div class="md:col-span-2 bg-gray-50 p-3 rounded border border-gray-200 mb-2">
+                            <label class="block text-sm font-bold text-gray-800 mb-2">평철 규격 및 단가 (Material)</label>
+                            <div class="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">폭 (W)</label>
+                                    <div class="relative">
+                                        <input type="number" id="hrWidth" value="50" class="w-full pl-2 pr-8 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right text-sm calc-input">
+                                        <span class="absolute right-2 top-1.5 text-xs text-gray-500">mm</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">두께 (T)</label>
+                                    <div class="relative">
+                                        <input type="number" id="hrThick" value="9" class="w-full pl-2 pr-8 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right text-sm calc-input">
+                                        <span class="absolute right-2 top-1.5 text-xs text-gray-500">T</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Kg당 단가</label>
+                                    <div class="relative">
+                                        <input type="number" id="hrPriceKg" value="900" class="w-full pl-2 pr-8 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right text-sm calc-input">
+                                        <span class="absolute right-2 top-1.5 text-xs text-gray-500">원</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">*입력된 규격 기준 평철 1m당 중량: <span id="outHrWeightInfo" class="font-bold text-blue-600">3.53</span> kg/m (자동계산)</p>
+                        </div>
+
+                        <!-- 세부 설정 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">핸드레일 설치 방향</label>
+                            <select id="hrSides" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm calc-input">
+                                <option value="1">한쪽 (편측)</option>
+                                <option value="2" selected>양쪽 (양측)</option>
+                            </select>
+                            <span class="block text-xs text-gray-500 mt-1">*벽면 여부에 따라 1열인지 2열인지 선택하세요.</span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">기본 높이 (손스침)</label>
+                            <div class="relative">
+                                <input type="number" id="hrHeight" value="1200" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">mm</span>
+                            </div>
+                            <span class="block text-xs text-gray-500 mt-1">*안전기준 1200mm 이상을 권장합니다.</span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">중간 살(간살) 개수</label>
+                            <div class="relative">
+                                <input type="number" id="hrRails" value="3" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">줄</span>
+                            </div>
+                            <span class="block text-xs text-gray-500 mt-1">*제일 위 손스침 하단에 들어가는 가로줄 수입니다.</span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">세로 기둥 설치 간격</label>
+                            <div class="relative">
+                                <!-- UI 버그 수정: pr-16을 pr-28로 늘려 글자 겹침 해결 -->
+                                <input type="number" id="hrPostSpace" value="4" class="w-full pl-3 pr-28 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">단마다 1개</span>
+                            </div>
+                            <span class="block text-xs text-gray-500 mt-1">*몇 개의 디딤판마다 기둥을 세울지 지정해 주세요.</span>
+                        </div>
+                        
+                        <!-- 계단참 옵션 -->
+                        <div class="md:col-span-2 pt-2 border-t border-gray-100 mt-2 space-y-3">
+                            <label class="flex items-center space-x-2 text-sm font-bold text-gray-800 cursor-pointer w-fit">
+                                <input type="checkbox" id="includeHrLanding" checked class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 calc-input">
+                                <span>계단참(오도리바) 핸드레일 물량 포함</span>
+                            </label>
+                            <div id="hrLandingOptions" class="flex flex-col sm:flex-row gap-4 ml-6">
+                                <label class="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="radio" name="hrLandingShape" value="double" checked class="calc-input">
+                                    <span>양옆 평행 (계단참길이 × 2)</span>
+                                </label>
+                                <label class="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="radio" name="hrLandingShape" value="lshape" class="calc-input">
+                                    <span>ㄱ자형 (계단참길이 + 계단폭)</span>
+                                </label>
+                            </div>
+                            <p class="text-xs text-gray-500 ml-6">*단면도 및 현장의 꺾임 구조에 맞춰 적용할 형태를 선택해 주세요.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. 인건비 및 부대비용 -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-xl font-bold mb-4 text-blue-700 border-b pb-2"><i class="fa-solid fa-users mr-2"></i>4. 인건비 및 기타 부대비용 (Labor & Misc)</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">투입 인력 공수</label>
+                            <div class="relative">
+                                <input type="number" id="laborDays" value="9" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">품</span>
+                            </div>
+                            <span class="block text-xs text-gray-500 mt-1">*층고 4.5m 기준 보통 9품 소요</span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">1품당 평균 단가 (일당)</label>
+                            <div class="relative">
+                                <input type="number" id="laborRate" value="250000" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">원</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">도장비 단가 (페인트/우레탄)</label>
+                            <div class="relative">
+                                <input type="number" id="pricePaintSq" value="15000" class="w-full pl-3 pr-14 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">원/m²</span>
+                            </div>
+                            <span class="block text-xs text-gray-500 mt-1">*전체 표면적 자동계산: <span id="outPaintAreaInfo" class="font-bold text-blue-600">0</span> m²</span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">장비대/운반비 (크레인, 화물차)</label>
+                            <div class="relative">
+                                <input type="number" id="costTransport" value="300000" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">원</span>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">잡자재비 (용접봉, 볼트, 가스 등 소모품)</label>
+                            <div class="relative w-full md:w-1/2">
+                                <input type="number" id="costMisc" value="100000" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right calc-input">
+                                <span class="absolute right-3 top-2 text-gray-500">원</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 오른쪽: 산출 결과 (Sticky) -->
+            <div class="lg:col-span-1">
+                <div class="bg-gray-800 text-white p-6 rounded-xl shadow-lg sticky top-6">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center justify-between border-b border-gray-600 pb-3">
+                        <span>산출 결과</span>
+                        <i class="fa-solid fa-calculator text-blue-400"></i>
+                    </h2>
+                    
+                    <div class="space-y-4 text-sm">
+                        <!-- 물량 요약 -->
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-bold text-gray-300 mb-2">필요 물량 및 중량 (로스 <span id="outLoss"></span>% 포함)</h3>
+                            <div class="flex justify-between mb-1 items-end border-b border-gray-600 pb-1">
+                                <span class="text-xs text-gray-400">ㄷ형강 (양쪽):</span>
+                                <div class="text-right">
+                                    <span class="font-mono text-blue-300 block"><span id="outChannelLen">0</span> m</span>
+                                    <span class="font-mono text-gray-400 text-xs">약 <span id="outWeightChannel">0</span> kg</span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between mb-1 items-end border-b border-gray-600 pb-1 pt-1">
+                                <span class="text-xs text-gray-400">무늬철판:</span>
+                                <div class="text-right">
+                                    <span class="font-mono text-blue-300 block"><span id="outPlateArea">0</span> m²</span>
+                                    <span class="font-mono text-gray-400 text-xs">약 <span id="outWeightPlate">0</span> kg</span>
+                                </div>
+                            </div>
+                            
+                            <!-- 추가된 평철 난간 요약 -->
+                            <div class="flex justify-between mb-1 items-end border-b border-gray-600 pb-1 pt-1" id="outHrContainer">
+                                <span class="text-xs text-gray-400">평철 난간:</span>
+                                <div class="text-right">
+                                    <span class="font-mono text-blue-300 block"><span id="outHrLength">0</span> m</span>
+                                    <span class="font-mono text-gray-400 text-xs">약 <span id="outWeightHr">0</span> kg</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-2 flex justify-between font-bold text-blue-200">
+                                <span>총 자재 중량:</span>
+                                <span><span id="outTotalWeight">0</span> kg</span>
+                            </div>
+                            <div class="mt-2 text-xs text-gray-400 border-t border-gray-600 pt-2 flex justify-between">
+                                <span>총 계단 전개 길이:</span>
+                                <span><span id="outTotalLength">0</span> m</span>
+                            </div>
+                        </div>
+
+                        <!-- 비용 요약 -->
+                        <div class="space-y-2 pt-2">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">자재비 소계:</span>
+                                <span class="font-mono"><span id="outCostMaterial">0</span> 원</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">인건비 소계:</span>
+                                <span class="font-mono"><span id="outCostLabor">0</span> 원</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">도장비 소계:</span>
+                                <span class="font-mono"><span id="outCostPaintCalc">0</span> 원</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">기타 부대비용:</span>
+                                <span class="font-mono"><span id="outCostMisc">0</span> 원</span>
+                            </div>
+                        </div>
+
+                        <!-- 총계 -->
+                        <div class="mt-6 pt-4 border-t border-gray-500">
+                            <div class="flex justify-between items-end mb-2">
+                                <span class="text-lg font-bold text-blue-300">총 예상 비용</span>
+                                <span class="text-2xl font-bold text-yellow-400"><span id="outTotalCost">0</span> 원</span>
+                            </div>
+                        </div>
+
+                        <!-- M당 단가 -->
+                        <div class="bg-blue-900 bg-opacity-50 p-4 rounded-lg mt-4 border border-blue-700">
+                            <h3 class="font-bold text-blue-200 mb-2 text-center">계단 M당 단가 지표</h3>
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs text-blue-100" title="계단의 경사진 길이와 계단참을 모두 합친 총 전개 길이 기준">총 길이 M당 단가:</span>
+                                <span class="font-bold text-white"><span id="outCostPerMeterLength">0</span> 원/m</span>
+                            </div>
+                            <div class="flex justify-between items-center border-t border-blue-700 pt-2">
+                                <span class="text-xs text-blue-100" title="바닥에서 윗층까지의 수직 높이 기준">수직 층고 M당 단가:</span>
+                                <span class="font-bold text-white"><span id="outCostPerMeterHeight">0</span> 원/m</span>
+                            </div>
+                        </div>
+
+                        <!-- 리스트에 추가 버튼 -->
+                        <button onclick="addToList()" class="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition duration-200 transform hover:-translate-y-1 flex items-center justify-center">
+                            <i class="fa-solid fa-list-check mr-2"></i>현재 산출내역 리스트에 추가
+                        </button>
+                        
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 산출 내역 리스트 하단 UI -->
+        <div class="mt-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200" id="listSection" style="display: none;">
+            <h2 class="text-xl font-bold mb-4 text-blue-700 border-b pb-2"><i class="fa-solid fa-list mr-2"></i>저장된 산출 내역 리스트</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                        <tr>
+                            <th scope="col" class="px-4 py-3 text-center">No.</th>
+                            <th scope="col" class="px-4 py-3">규격 요약</th>
+                            <th scope="col" class="px-4 py-3 text-right">총 자재비</th>
+                            <th scope="col" class="px-4 py-3 text-right">인건비/도장비 등</th>
+                            <th scope="col" class="px-4 py-3 text-right text-blue-700 font-bold">총 예상비용</th>
+                            <th scope="col" class="px-4 py-3 text-center">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listTbody">
+                        <!-- 리스트 아이템이 여기에 자바스크립트로 렌더링 됩니다 -->
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-500 mt-3 text-right">* 위 내역들은 상단의 [엑셀 출력하기]를 통해 상세한 계산식과 함께 다운로드할 수 있습니다.</p>
+        </div>
+    </div>
+
+    <script>
+        // 숫자에 콤마 찍기
+        const formatNum = (num) => Math.round(num).toLocaleString('ko-KR');
+
+        // 전역 데이터 객체 및 리스트 배열 추가
+        let currentCalcData = null;
+        let calcHistory = [];
+
+        function calculate() {
+            // 1. 입력값 가져오기 (단위 환산 포함)
+            const height = parseFloat(document.getElementById('height').value) || 0; // mm
+            const width = parseFloat(document.getElementById('width').value) || 0; // mm
+            const tread = parseFloat(document.getElementById('tread').value) || 0; // mm
+            const steps = parseFloat(document.getElementById('steps').value) || 0; // 개
+            const landingCount = parseFloat(document.getElementById('landingCount').value) || 0; // 개
+            const landingLength = parseFloat(document.getElementById('landingLength').value) || 0; // mm
+            const includeRiser = document.getElementById('includeRiser').checked; // 챌판 포함 여부
+
+            const weightChannel = parseFloat(document.getElementById('weightChannel').value) || 0; // kg/m
+            const priceChannelKg = parseFloat(document.getElementById('priceChannelKg').value) || 0; // 원/kg
+            
+            const thickPlate = parseFloat(document.getElementById('thickPlate').value) || 0; // T (mm)
+            const pricePlateKg = parseFloat(document.getElementById('pricePlateKg').value) || 0; // 원/kg
+            
+            // 핸드레일 변수
+            const includeHandrail = document.getElementById('includeHandrail').checked;
+            const hrWidth = parseFloat(document.getElementById('hrWidth').value) || 0;
+            const hrThick = parseFloat(document.getElementById('hrThick').value) || 0;
+            const hrPriceKg = parseFloat(document.getElementById('hrPriceKg').value) || 0;
+            const hrSides = parseFloat(document.getElementById('hrSides').value) || 1;
+            const hrHeight = parseFloat(document.getElementById('hrHeight').value) || 0;
+            const hrRails = parseFloat(document.getElementById('hrRails').value) || 0;
+            const hrPostSpace = parseFloat(document.getElementById('hrPostSpace').value) || 1;
+            const includeHrLanding = document.getElementById('includeHrLanding').checked;
+            const hrLandingShape = document.querySelector('input[name="hrLandingShape"]:checked').value;
+
+            // UI 활성화/비활성화 시각 처리
+            document.getElementById('handrailSettings').style.opacity = includeHandrail ? '1' : '0.5';
+            document.getElementById('handrailSettings').style.pointerEvents = includeHandrail ? 'auto' : 'none';
+            document.getElementById('hrLandingOptions').style.opacity = includeHrLanding ? '1' : '0.5';
+            document.getElementById('hrLandingOptions').style.pointerEvents = includeHrLanding ? 'auto' : 'none';
+
+            // 평철 1m당 단위 중량 = W(mm) * T(mm) * 0.00785 (철의 비중)
+            const hrUnitWeight = hrWidth * hrThick * 0.00785;
+            document.getElementById('outHrWeightInfo').innerText = hrUnitWeight.toFixed(2);
+
+            const lossRate = parseFloat(document.getElementById('lossRate').value) || 0; // %
+
+            const laborDays = parseFloat(document.getElementById('laborDays').value) || 0; // 일
+            const laborRate = parseFloat(document.getElementById('laborRate').value) || 0; // 원/일
+            
+            const pricePaintSq = parseFloat(document.getElementById('pricePaintSq').value) || 0; // 원/m2
+            const costTransport = parseFloat(document.getElementById('costTransport').value) || 0; // 원
+            const costMisc = parseFloat(document.getElementById('costMisc').value) || 0; // 원
+
+            // ----------------------------------------------------
+            // 단높이 & 디딤판 너비 피드백
+            // ----------------------------------------------------
+            const riserHeight = steps > 0 ? parseFloat((height / steps).toFixed(1)) : 0;
+            const stepInfoEl = document.getElementById('stepHeightInfo');
+            
+            if (steps > 0) {
+                if (riserHeight < 150 || riserHeight > 200) {
+                    stepInfoEl.className = "text-xs text-red-500 mt-1 text-right font-bold";
+                    stepInfoEl.innerText = `* 현재 단높이 ${riserHeight}mm (권장 150~200mm 벗어남)`;
+                } else if (riserHeight === 180) {
+                    stepInfoEl.className = "text-xs text-blue-600 mt-1 text-right font-bold";
+                    stepInfoEl.innerText = `* 현재 단높이 ${riserHeight}mm (추천 단높이!)`;
+                } else {
+                    stepInfoEl.className = "text-xs text-blue-500 mt-1 text-right";
+                    stepInfoEl.innerText = `* 현재 단높이 ${riserHeight}mm (적절함)`;
+                }
+            } else {
+                stepInfoEl.innerText = "";
+            }
+
+            const treadInfoEl = document.getElementById('treadInfo');
+            if (tread > 0 && tread < 280) {
+                treadInfoEl.innerHTML = '<span class="text-red-500">*일반적으로 280mm 이상을 권장합니다.</span>';
+            } else if (tread >= 280) {
+                treadInfoEl.innerHTML = '<span class="text-blue-500">*적절한 디딤판 너비입니다. (280mm 이상)</span>';
+            } else {
+                treadInfoEl.innerHTML = '';
+            }
+
+            // ----------------------------------------------------
+            // 2. 물량 및 중량 계산
+            // ----------------------------------------------------
+            // 계단의 수평 투영 길이
+            const totalRun = steps > 1 ? (steps - 1) * tread : steps * tread; 
+            // 경사로의 길이 (피타고라스 정리)
+            const slopedLength = Math.sqrt(Math.pow(height, 2) + Math.pow(totalRun, 2)); // mm
+            
+            // 총 전개 길이 (보행 기준)
+            const totalLengthMm = slopedLength + (landingLength * landingCount);
+            const totalLengthM = totalLengthMm / 1000; // 미터 환산
+
+            const w_m = width / 1000;
+            const h_m = height / 1000;
+            const t_m = tread / 1000;
+            const l_m = landingLength / 1000;
+
+            // ㄷ형강 길이 (경사로 양쪽 측면 + U자형 계단참 테두리 * 로스율)
+            // 1. 경사로 양옆: slopedLengthM * 2
+            // 2. 계단참 테두리(U자형 지지대): 뒷면(w_m * 2) + 양옆(l_m * 2)
+            const slopedLengthM = slopedLength / 1000;
+            const channelLandingBase = ((w_m * 2) + (l_m * 2)) * landingCount;
+            const channelLengthBase = (slopedLengthM * 2) + channelLandingBase;
+            const channelLengthFinal = channelLengthBase * (1 + lossRate / 100);
+
+            // 무늬철판 면적 (디딤판 + 계단참(폭2배) + 챌판 * 로스율)
+            let riserAreaBase = 0;
+            if (includeRiser) {
+                riserAreaBase = w_m * h_m; // 챌판 총 면적 = 계단폭 * 층고
+            }
+
+            const landingAreaBase = (w_m * 2 * l_m) * landingCount; // U자형 계단참 면적 (계단폭의 2배 적용)
+            const plateAreaBase = ((w_m * t_m) * steps) + landingAreaBase + riserAreaBase;
+            const plateAreaFinal = plateAreaBase * (1 + lossRate / 100);
+
+            // 중량(kg) 산출
+            const totalWeightChannel = channelLengthFinal * weightChannel;
+            
+            // 철판 비중(7.85) * 두께 + 무늬돌기 무게(약 1.5) = m2당 중량
+            const weightPlateSq = (thickPlate * 7.85) + 1.5; 
+            const totalWeightPlate = plateAreaFinal * weightPlateSq;
+
+            // ----------------------------------------------------
+            // 평철 핸드레일 소요량 계산
+            // ----------------------------------------------------
+            let hrTotalLengthFinal = 0;
+            let totalWeightHr = 0;
+            let hrPaintArea = 0;
+            
+            // JSON 데이터 생성 시 참조할 수 있도록 전역으로 변수 선언 위치 이동
+            let topRailLength = 0;
+            let intermediateRailsLength = 0;
+            let postsTotalLength = 0;
+            let hrTotalLengthBase = 0;
+            
+            if (includeHandrail) {
+                // 1. 경사로 손스침 길이
+                const slopedLengthM = slopedLength / 1000;
+                const hrSlopedLength = slopedLengthM * hrSides;
+
+                // 2. 계단참 손스침 길이
+                let hrLandingLength = 0;
+                if (includeHrLanding && landingCount > 0) {
+                    if (hrLandingShape === 'double') {
+                        hrLandingLength = (l_m * 2) * landingCount; // 양옆 평행
+                    } else if (hrLandingShape === 'lshape') {
+                        hrLandingLength = (l_m + w_m) * landingCount; // ㄱ자 꺾임
+                    }
+                }
+
+                topRailLength = hrSlopedLength + hrLandingLength;
+
+                // 3. 간살(중간 살) 길이 = (최상단 손스침 총 길이 * 간살 개수)
+                intermediateRailsLength = topRailLength * hrRails;
+
+                // 4. 세로 기둥 소요 길이
+                // 경사로 기둥: (단수 / 지정간격) 올림 + 1(시작점) -> 설치면(양/단) 곱하기
+                const slopedPostsCount = (Math.ceil(steps / hrPostSpace) + 1) * hrSides;
+                // 계단참 기둥: 디딤판 길이 비율만큼 수평 거리를 나누어 산출
+                const postSpacingM = (tread / 1000) * hrPostSpace;
+                const landingPostsCount = includeHrLanding && landingCount > 0 ? Math.ceil(hrLandingLength / postSpacingM) + landingCount : 0;
+                
+                const totalPostsCount = slopedPostsCount + landingPostsCount;
+                postsTotalLength = totalPostsCount * (hrHeight / 1000);
+
+                // 5. 평철 총 소요 길이 (로스 반영)
+                hrTotalLengthBase = topRailLength + intermediateRailsLength + postsTotalLength;
+                hrTotalLengthFinal = hrTotalLengthBase * (1 + lossRate / 100);
+
+                // 6. 중량 산출
+                totalWeightHr = hrTotalLengthFinal * hrUnitWeight;
+                
+                // 7. 도장 면적 산출 (평철 표면적: (W+T)*2 / 1000 * 총길이)
+                hrPaintArea = hrTotalLengthFinal * ((hrWidth + hrThick) * 2 / 1000);
+            }
+
+            const totalWeightAll = totalWeightChannel + totalWeightPlate + totalWeightHr;
+
+            // 도장 면적 산출 (무늬철판 상/하 양면 + ㄷ형강 표면적 + 평철 표면적)
+            const paintSurfaceArea = (plateAreaFinal * 2) + (channelLengthFinal * 0.4) + hrPaintArea;
+
+            // ----------------------------------------------------
+            // 3. 비용 계산
+            // ----------------------------------------------------
+            const materialCost = (totalWeightChannel * priceChannelKg) + (totalWeightPlate * pricePlateKg) + (totalWeightHr * hrPriceKg);
+            const laborCost = laborDays * laborRate;
+            const paintCost = paintSurfaceArea * pricePaintSq;
+            const miscOtherCost = costMisc + costTransport;
+            
+            const totalCost = materialCost + laborCost + paintCost + miscOtherCost;
+
+            // 4. M당 단가 계산
+            const costPerMeterLength = totalLengthM > 0 ? totalCost / totalLengthM : 0;
+            const heightM = height / 1000;
+            const costPerMeterHeight = heightM > 0 ? totalCost / heightM : 0;
+
+            // ----------------------------------------------------
+            // 5. 화면에 출력
+            // ----------------------------------------------------
+            document.getElementById('outLoss').innerText = lossRate;
+            document.getElementById('outChannelLen').innerText = channelLengthFinal.toFixed(2);
+            document.getElementById('outWeightChannel').innerText = formatNum(totalWeightChannel);
+            
+            document.getElementById('outPlateArea').innerText = plateAreaFinal.toFixed(2);
+            document.getElementById('outWeightPlate').innerText = formatNum(totalWeightPlate);
+            
+            // 평철 난간 산출 결과 업데이트
+            document.getElementById('outHrLength').innerText = hrTotalLengthFinal.toFixed(2);
+            document.getElementById('outWeightHr').innerText = formatNum(totalWeightHr);
+            document.getElementById('outHrContainer').style.display = includeHandrail ? 'flex' : 'none';
+
+            document.getElementById('outTotalWeight').innerText = formatNum(totalWeightAll);
+            document.getElementById('outTotalLength').innerText = totalLengthM.toFixed(2);
+            
+            document.getElementById('outPaintAreaInfo').innerText = paintSurfaceArea.toFixed(1);
+
+            document.getElementById('outCostMaterial').innerText = formatNum(materialCost);
+            document.getElementById('outCostLabor').innerText = formatNum(laborCost);
+            document.getElementById('outCostPaintCalc').innerText = formatNum(paintCost);
+            document.getElementById('outCostMisc').innerText = formatNum(miscOtherCost);
+            
+            document.getElementById('outTotalCost').innerText = formatNum(totalCost);
+            
+            document.getElementById('outCostPerMeterLength').innerText = formatNum(costPerMeterLength);
+            document.getElementById('outCostPerMeterHeight').innerText = formatNum(costPerMeterHeight);
+
+            // ----------------------------------------------------
+            // 6. 리스트 저장 및 엑셀 출력을 위한 상세 데이터 객체 생성
+            // ----------------------------------------------------
+            currentCalcData = {
+                spec: `층고 ${height}mm, 폭 ${width}mm, ${steps}단`,
+                materialCost: materialCost,
+                laborCost: laborCost,
+                paintCost: paintCost,
+                miscCost: miscOtherCost,
+                totalCost: totalCost,
+                descChannel: `[ㄷ형강] 1m당 중량: ${weightChannel}kg, 단가: ${priceChannelKg}원\n` + 
+                             `전개길이 ${(slopedLengthM * 2).toFixed(2)}m + 계단참 ${channelLandingBase.toFixed(2)}m = ${channelLengthBase.toFixed(2)}m\n` +
+                             `로스(${lossRate}%) 적용 길이: ${channelLengthFinal.toFixed(2)}m\n` +
+                             `총 중량: ${totalWeightChannel.toFixed(1)}kg\n` +
+                             `▶ 금액: ${formatNum(totalWeightChannel * priceChannelKg)}원`,
+                descPlate: `[무늬철판] 두께: ${thickPlate}T (1m²당 ${weightPlateSq.toFixed(2)}kg), 단가: ${pricePlateKg}원\n` +
+                           `면적: 디딤판 ${(w_m * t_m * steps).toFixed(2)}m² + 계단참 ${landingAreaBase.toFixed(2)}m² + 챌판 ${riserAreaBase.toFixed(2)}m² = ${plateAreaBase.toFixed(2)}m²\n` +
+                           `로스(${lossRate}%) 적용 면적: ${plateAreaFinal.toFixed(2)}m²\n` +
+                           `총 중량: ${totalWeightPlate.toFixed(1)}kg\n` +
+                           `▶ 금액: ${formatNum(totalWeightPlate * pricePlateKg)}원`,
+                descHr: !includeHandrail ? `미포함` :
+                        `[평철난간] 규격: ${hrWidth}×${hrThick}T (1m당 ${hrUnitWeight.toFixed(2)}kg), 단가: ${hrPriceKg}원\n` +
+                        `길이: 손스침 ${topRailLength.toFixed(2)}m + 간살 ${intermediateRailsLength.toFixed(2)}m + 기둥 ${postsTotalLength.toFixed(2)}m = ${hrTotalLengthBase.toFixed(2)}m\n` +
+                        `로스(${lossRate}%) 적용 길이: ${hrTotalLengthFinal.toFixed(2)}m\n` +
+                        `총 중량: ${totalWeightHr.toFixed(1)}kg\n` +
+                        `▶ 금액: ${formatNum(totalWeightHr * hrPriceKg)}원`,
+                descLabor: `[인건비/도장비]\n` +
+                           `인건비: ${laborDays}품 × ${formatNum(laborRate)}원 = ${formatNum(laborCost)}원\n` +
+                           `도장비: 전체표면적 ${paintSurfaceArea.toFixed(1)}m² × ${formatNum(pricePaintSq)}원 = ${formatNum(paintCost)}원`
+            };
+        }
+
+        // 모든 입력 필드에 이벤트 리스너 등록하여 자동 계산 구현
+        document.querySelectorAll('.calc-input').forEach(input => {
+            input.addEventListener('input', calculate);
+        });
+
+        // ==========================================
+        // 추가 기능: 리스트 관리, JSON 저장/불러오기, 엑셀 출력
+        // ==========================================
+        function addToList() {
+            if(!currentCalcData) return;
+            // 깊은 복사로 현재 계산 상태를 리스트 배열에 푸시
+            calcHistory.push(JSON.parse(JSON.stringify(currentCalcData)));
+            renderList();
+        }
+
+        function renderList() {
+            const section = document.getElementById('listSection');
+            const tbody = document.getElementById('listTbody');
+            
+            if(calcHistory.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            section.style.display = 'block';
+            tbody.innerHTML = '';
+            
+            calcHistory.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "bg-white border-b hover:bg-gray-50 transition";
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-medium text-gray-900 text-center">${index + 1}</td>
+                    <td class="px-4 py-3 font-bold">${item.spec}</td>
+                    <td class="px-4 py-3 text-right">${formatNum(item.materialCost)} 원</td>
+                    <td class="px-4 py-3 text-right text-gray-500">${formatNum(item.laborCost + item.paintCost + item.miscCost)} 원</td>
+                    <td class="px-4 py-3 text-right text-blue-700 font-bold text-lg">${formatNum(item.totalCost)} 원</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="removeList(${index})" class="text-red-500 hover:text-white hover:bg-red-500 px-3 py-1 rounded transition text-sm">삭제</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function removeList(index) {
+            calcHistory.splice(index, 1);
+            renderList();
+        }
+
+        function saveJSON() {
+            if(calcHistory.length === 0) {
+                alert('저장할 데이터가 없습니다. 먼저 리스트에 추가해주세요.');
+                return;
+            }
+            const dataStr = JSON.stringify(calcHistory, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "계단산출_데이터백업.json";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function loadJSON(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const loadedData = JSON.parse(e.target.result);
+                    if(Array.isArray(loadedData)) {
+                        calcHistory = loadedData;
+                        renderList();
+                        alert('데이터를 성공적으로 불러왔습니다.');
+                    } else {
+                        alert('잘못된 파일 형식입니다.');
+                    }
+                } catch(err) {
+                    alert('JSON 파일을 분석하는데 실패했습니다.');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // 재업로드를 위해 초기화
+        }
+
+        function exportExcel() {
+            if(calcHistory.length === 0) {
+                alert('엑셀로 출력할 데이터가 없습니다. 먼저 [리스트에 추가] 버튼을 눌러주세요.');
+                return;
+            }
+            
+            // 엑셀에 들어갈 열과 데이터 매핑 (산출 근거 포함)
+            const wsData = calcHistory.map((item, index) => ({
+                "번호": index + 1,
+                "계단 규격 요약": item.spec,
+                "총 자재비(원)": item.materialCost,
+                "인건비(원)": item.laborCost,
+                "도장비(원)": item.paintCost,
+                "기타 부대비용(원)": item.miscCost,
+                "총 예상비용(원)": item.totalCost,
+                "---": "", // 구분선 역할
+                "[상세] ㄷ형강 산출근거": item.descChannel,
+                "[상세] 무늬철판 산출근거": item.descPlate,
+                "[상세] 평철난간 산출근거": item.descHr,
+                "[상세] 노무/도장 산출근거": item.descLabor
+            }));
+            
+            const ws = XLSX.utils.json_to_sheet(wsData);
+            
+            // 셀 너비(열 간격) 대략적 자동 조절
+            ws['!cols'] = [
+                {wch: 5}, {wch: 25}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 3}, {wch: 60}, {wch: 60}, {wch: 60}, {wch: 60}
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "비용산출 내역서");
+            XLSX.writeFile(wb, "철제계단_비용산출_상세내역서.xlsx");
+        }
+
+        // 초기 로드 시 한 번 계산 실행
+        window.onload = calculate;
+    </script>
+</body>
+</html>

@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 건축 적산 - 터파기/되메우기 산출</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Pretendard', sans-serif; background-color: #f3f4f6; }
+        canvas { cursor: crosshair; touch-action: none; }
+        .direction-btn { transition: all 0.1s; }
+        .direction-btn:active { transform: scale(0.95); background-color: #e5e7eb; }
+        .direction-btn.selected { background-color: #3b82f6; color: white; border-color: #2563eb; }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <!-- 상단: 입력 및 결과 패널 (1단) -->
+    <header class="bg-white shadow-md z-10 p-4 shrink-0">
+        <div class="max-w-7xl mx-auto">
+            <h1 class="text-xl font-bold text-gray-800 mb-3"><i class="fas fa-calculator text-blue-600 mr-2"></i>터파기 및 되메우기 체적 자동 산출기</h1>
+            
+            <div class="flex flex-wrap gap-4 items-end bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs text-gray-500 mb-1">매트 두께 (mm)</label>
+                    <input type="number" id="matThickness" value="300" step="10" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" onchange="calculateVolumes()">
+                </div>
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs text-gray-500 mb-1">지중보 너비 (mm)</label>
+                    <input type="number" id="gbWidth" value="500" step="10" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" onchange="calculateVolumes()">
+                </div>
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs text-gray-500 mb-1">지중보 높이 (mm)</label>
+                    <input type="number" id="gbHeight" value="1000" step="10" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" onchange="calculateVolumes()">
+                </div>
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs text-gray-500 mb-1">작업 여유폭 (mm)</label>
+                    <input type="number" id="workOffset" value="1500" step="100" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" onchange="calculateVolumes()">
+                </div>
+                
+                <!-- 결과 출력부 -->
+                <div class="flex gap-4 ml-auto border-l pl-4">
+                    <div class="text-right p-2 rounded hover:bg-gray-100 cursor-pointer transition select-none group" ondblclick="showModal('excavation')" title="더블클릭하여 산출식 보기">
+                        <div class="text-xs text-gray-500 group-hover:text-red-500 transition"><i class="fas fa-search mr-1"></i>터파기 체적</div>
+                        <div class="text-lg font-bold text-red-600"><span id="resExcVolume">0.00</span> <span class="text-sm">m³</span></div>
+                    </div>
+                    <div class="text-right p-2 rounded hover:bg-gray-100 cursor-pointer transition select-none group" ondblclick="showModal('structure')" title="더블클릭하여 산출식 보기">
+                        <div class="text-xs text-gray-500 group-hover:text-gray-800 transition"><i class="fas fa-search mr-1"></i>구조물 체적</div>
+                        <div class="text-lg font-bold text-gray-700"><span id="resStrVolume">0.00</span> <span class="text-sm">m³</span></div>
+                    </div>
+                    <div class="text-right p-2 rounded hover:bg-gray-100 cursor-pointer transition select-none group" ondblclick="showModal('backfill')" title="더블클릭하여 산출식 보기">
+                        <div class="text-xs text-gray-500 group-hover:text-blue-500 transition"><i class="fas fa-search mr-1"></i>되메우기 체적</div>
+                        <div class="text-lg font-bold text-blue-600"><span id="resBackfill">0.00</span> <span class="text-sm">m³</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 하단: 드로잉 캔버스 및 컨트롤러 (2단) -->
+    <main class="flex-1 flex overflow-hidden max-w-7xl mx-auto w-full p-4 gap-4">
+        
+        <!-- 왼쪽: 모눈종이 캔버스 -->
+        <div class="flex-1 bg-white rounded-lg shadow border border-gray-300 relative overflow-hidden flex flex-col">
+            <div class="absolute top-2 left-2 bg-white/80 px-2 py-1 rounded text-xs text-gray-600 pointer-events-none z-10 border border-gray-200">
+                <i class="fas fa-mouse pointer"></i> 드래그: 이동 | 휠: 확대/축소
+            </div>
+            <div class="absolute top-2 right-2 flex gap-2 z-10">
+                <button onclick="resetView()" class="bg-white border p-1.5 rounded shadow hover:bg-gray-50 text-gray-600" title="화면 초기화">
+                    <i class="fas fa-compress-arrows-alt"></i>
+                </button>
+            </div>
+            <canvas id="gridCanvas" class="w-full h-full"></canvas>
+        </div>
+
+        <!-- 오른쪽: 8방향 컨트롤러 및 도구 -->
+        <div class="w-96 bg-white rounded-lg shadow border border-gray-300 flex flex-col">
+            <div class="p-3 bg-gray-100 border-b font-bold text-gray-700 flex justify-between items-center">
+                <span>드로잉 패드</span>
+                <span id="currentCoord" class="text-xs font-normal text-gray-500">X: 0, Y: 0</span>
+            </div>
+            
+            <div class="p-3 flex-1 overflow-y-auto">
+                <!-- 그리기 모드 -->
+                <div class="mb-4 flex bg-gray-100 p-1 rounded-lg">
+                    <button id="modeMain" class="flex-1 py-1.5 text-sm rounded bg-white shadow-sm font-bold text-blue-600" onclick="setMode('main')">매트 외곽선</button>
+                    <button id="modePit" class="flex-1 py-1.5 text-sm rounded text-gray-500 hover:text-gray-800" onclick="setMode('pit')">엘리베이터 피트</button>
+                </div>
+
+                <!-- 피트 모드일때 추가 깊이 입력 -->
+                <div id="pitDepthInput" class="mb-4 hidden">
+                    <label class="block text-xs text-gray-500 mb-1">피트 추가 깊이 (mm, 내리기)</label>
+                    <input type="number" id="pitDepth" value="1500" step="100" class="w-full border rounded p-2 text-sm outline-none border-orange-300 focus:ring-2 focus:ring-orange-400">
+                </div>
+
+                <!-- 8방향 키패드 -->
+                <div class="grid grid-cols-3 gap-2 w-48 mx-auto mb-4">
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600" onclick="selectDir(-1, 1)"><i class="fas fa-arrow-up-left"></i></button>
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600" onclick="selectDir(0, 1)"><i class="fas fa-arrow-up"></i></button>
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600" onclick="selectDir(1, 1)"><i class="fas fa-arrow-up-right"></i></button>
+                    
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600" onclick="selectDir(-1, 0)"><i class="fas fa-arrow-left"></i></button>
+                    <div class="flex items-center justify-center text-xs text-gray-400"><i class="fas fa-crosshairs"></i></div>
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600 selected" onclick="selectDir(1, 0)"><i class="fas fa-arrow-right"></i></button>
+                    
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600" onclick="selectDir(-1, -1)"><i class="fas fa-arrow-down-left"></i></button>
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600" onclick="selectDir(0, -1)"><i class="fas fa-arrow-down"></i></button>
+                    <button class="direction-btn border rounded-lg p-2 text-gray-600" onclick="selectDir(1, -1)"><i class="fas fa-arrow-down-right"></i></button>
+                </div>
+
+                <!-- 거리 입력 및 실행 -->
+                <div class="mb-4">
+                    <label class="block text-xs text-gray-500 mb-1">이동 거리 (mm)</label>
+                    <div class="flex gap-2">
+                        <input type="number" id="moveDist" value="5000" step="100" class="flex-1 border rounded p-2 text-lg font-bold outline-none focus:ring-2 focus:ring-blue-400 text-center" onkeypress="if(event.key === 'Enter') executeMove()">
+                        <button onclick="executeMove()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold shadow transition"><i class="fas fa-pencil-alt"></i></button>
+                    </div>
+                </div>
+
+                <hr class="my-3 border-gray-200">
+
+                <!-- 액션 버튼 -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="undo()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded text-sm transition"><i class="fas fa-undo mr-1"></i>되돌리기</button>
+                    <button onclick="closePolygon()" class="bg-green-100 hover:bg-green-200 text-green-700 border border-green-300 py-2 rounded text-sm transition font-bold"><i class="fas fa-link mr-1"></i>시작점 연결</button>
+                    <button onclick="clearCurrent()" class="col-span-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2 rounded text-sm transition"><i class="fas fa-trash-alt mr-1"></i>현재 선 지우기</button>
+                </div>
+            </div>
+            
+            <div class="p-3 bg-gray-50 border-t text-xs text-gray-500 leading-relaxed">
+                * 평면 치수를 입력하여 도형을 완성하세요.<br>
+                * 완성된 도형을 기준으로 터파기 여유폭이 자동 연산되어 체적이 도출됩니다.
+            </div>
+        </div>
+    </main>
+
+    <!-- 산출식 모달 -->
+    <div id="calcModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg w-[500px] max-w-full m-4">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h2 id="modalTitle" class="text-lg font-bold text-gray-800">산출식 상세</h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-700 transition"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div id="modalContent" class="p-4 text-sm text-gray-700 leading-relaxed bg-gray-50 max-h-[60vh] overflow-y-auto">
+                <!-- 내용 동적 생성 -->
+            </div>
+            <div class="p-4 border-t text-right">
+                <button onclick="closeModal()" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700 transition">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 캔버스 및 뷰포트 상태 ---
+        const canvas = document.getElementById('gridCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let viewScale = 0.015; // 1000mm = 15px
+        let viewOffsetX = 0;
+        let viewOffsetY = 0;
+        let isDragging = false;
+        let dragStartX, dragStartY;
+
+        // --- 데이터 상태 ---
+        // points 구조: {x, y} (단위: mm)
+        let mode = 'main'; // 'main' 또는 'pit'
+        let mainPolygon = [];
+        let pits = []; // { points: [], depth: float }
+        
+        let currentPath = []; // 현재 그리고 있는 선의 점들
+        let currentDir = {x: 1, y: 0}; // 기본: 우측
+
+        // 산출 결과 저장용 (모달 표시용)
+        let calcDetails = {};
+
+        // 화면 크기에 맞게 캔버스 리사이즈
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            if(viewOffsetX === 0 && viewOffsetY === 0) {
+                resetView();
+            } else {
+                draw();
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // 초기 화면 중앙 정렬
+        function resetView() {
+            viewScale = 0.015;
+            viewOffsetX = canvas.width / 2;
+            viewOffsetY = canvas.height / 2;
+            draw();
+        }
+
+        // --- 마우스 이벤트 (팬 & 줌) ---
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragStartX = e.clientX - viewOffsetX;
+            dragStartY = e.clientY - viewOffsetY;
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                viewOffsetX = e.clientX - dragStartX;
+                viewOffsetY = e.clientY - dragStartY;
+                draw();
+            }
+        });
+        canvas.addEventListener('mouseup', () => isDragging = false);
+        canvas.addEventListener('mouseleave', () => isDragging = false);
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSpeed = 0.1;
+            const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+            const mouseY = e.clientY - canvas.getBoundingClientRect().top;
+            
+            const wheel = e.deltaY < 0 ? 1 : -1;
+            const zoomFactor = Math.exp(wheel * zoomSpeed);
+            
+            viewOffsetX = mouseX - (mouseX - viewOffsetX) * zoomFactor;
+            viewOffsetY = mouseY - (mouseY - viewOffsetY) * zoomFactor;
+            viewScale *= zoomFactor;
+            draw();
+        });
+
+        // --- UI 컨트롤 ---
+        function setMode(newMode) {
+            mode = newMode;
+            document.getElementById('modeMain').className = mode === 'main' ? 'flex-1 py-1.5 text-sm rounded bg-white shadow-sm font-bold text-blue-600' : 'flex-1 py-1.5 text-sm rounded text-gray-500 hover:text-gray-800';
+            document.getElementById('modePit').className = mode === 'pit' ? 'flex-1 py-1.5 text-sm rounded bg-white shadow-sm font-bold text-orange-600' : 'flex-1 py-1.5 text-sm rounded text-gray-500 hover:text-gray-800';
+            document.getElementById('pitDepthInput').style.display = mode === 'pit' ? 'block' : 'none';
+            currentPath = [];
+            draw();
+        }
+
+        function selectDir(dx, dy) {
+            currentDir = {x: dx, y: dy};
+            const btns = document.querySelectorAll('.direction-btn');
+            btns.forEach(btn => btn.classList.remove('selected', 'bg-blue-600', 'text-white'));
+            event.currentTarget.classList.add('selected', 'bg-blue-600', 'text-white');
+        }
+
+        function executeMove() {
+            const dist = parseFloat(document.getElementById('moveDist').value);
+            if(isNaN(dist) || dist <= 0) return;
+
+            // 첫 클릭 시 (0,0)을 시작점으로 자동 등록하여 선이 바로 그려지게 함
+            if (currentPath.length === 0) {
+                currentPath.push({x: 0, y: 0});
+            }
+
+            let lastPoint = currentPath[currentPath.length - 1];
+            
+            // 대각선 이동 시 길이 보정 (단순 x, y 단순합산이 아닌 삼각비 적용)
+            let lengthMultiplier = (Math.abs(currentDir.x) === 1 && Math.abs(currentDir.y) === 1) ? (dist / Math.sqrt(2)) : dist;
+
+            let newPoint = {
+                x: lastPoint.x + (currentDir.x * (currentDir.x !== 0 && currentDir.y !== 0 ? lengthMultiplier : dist)),
+                y: lastPoint.y + (currentDir.y * (currentDir.x !== 0 && currentDir.y !== 0 ? lengthMultiplier : dist))
+            };
+
+            currentPath.push(newPoint);
+            updateCoordDisplay(newPoint);
+            draw();
+        }
+
+        function undo() {
+            if (currentPath.length > 0) {
+                currentPath.pop();
+                let lastPoint = currentPath.length > 0 ? currentPath[currentPath.length - 1] : {x:0, y:0};
+                updateCoordDisplay(lastPoint);
+                draw();
+            }
+        }
+
+        function clearCurrent() {
+            currentPath = [];
+            updateCoordDisplay({x:0, y:0});
+            draw();
+        }
+
+        function closePolygon() {
+            if (currentPath.length < 3) return alert("다각형을 구성하기 위해 최소 3개의 점이 필요합니다.");
+            
+            if (mode === 'main') {
+                mainPolygon = [...currentPath];
+            } else {
+                let pDepth = parseFloat(document.getElementById('pitDepth').value) || 1500;
+                pits.push({ points: [...currentPath], depth: pDepth });
+            }
+            currentPath = [];
+            updateCoordDisplay({x:0, y:0});
+            calculateVolumes();
+            draw();
+        }
+
+        function updateCoordDisplay(pt) {
+            document.getElementById('currentCoord').innerText = `X: ${pt.x.toFixed(0)}, Y: ${pt.y.toFixed(0)}`;
+        }
+
+        // --- 계산 로직 ---
+        function calculateArea(pts) {
+            if(!pts || pts.length < 3) return 0;
+            let area = 0;
+            for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+                area += (pts[j].x + pts[i].x) * (pts[j].y - pts[i].y);
+            }
+            return Math.abs(area / 2);
+        }
+
+        function calculatePerimeter(pts) {
+            if(!pts || pts.length < 2) return 0;
+            let perimeter = 0;
+            for (let i = 0; i < pts.length; i++) {
+                let next = (i + 1) % pts.length;
+                let dx = pts[next].x - pts[i].x;
+                let dy = pts[next].y - pts[i].y;
+                perimeter += Math.sqrt(dx*dx + dy*dy);
+            }
+            return perimeter;
+        }
+
+        function calculateVolumes() {
+            let matThick = (parseFloat(document.getElementById('matThickness').value) || 0) / 1000;
+            let gbWidth = (parseFloat(document.getElementById('gbWidth').value) || 0) / 1000;
+            let gbHeight = (parseFloat(document.getElementById('gbHeight').value) || 0) / 1000;
+            let offset = (parseFloat(document.getElementById('workOffset').value) || 0) / 1000;
+
+            // mm단위로 계산된 면적/둘레를 M단위 체적으로 도출하기 위해 변환
+            let area_m2 = calculateArea(mainPolygon) / 1000000;
+            let perimeter_m = calculatePerimeter(mainPolygon) / 1000;
+
+            let structVol = 0;
+            let backfillVol = 0;
+            let totalExcVol = 0;
+
+            // 모달 표시용 데이터 초기화
+            let structDetails = { main: 0, pit: 0, gbArea: 0, netMatArea: 0 };
+            let pitDetailsArr = [];
+
+            if (mainPolygon.length >= 3) {
+                // 제안해주신 로직 적용
+                let gbArea = perimeter_m * gbWidth;
+                let netMatArea = Math.max(0, area_m2 - gbArea); // 지중보 면적을 제외한 순수 매트 면적
+                structDetails.gbArea = gbArea;
+                structDetails.netMatArea = netMatArea;
+
+                // 1. 구조물 체적 = 지중보 체적 + 매트 체적
+                let mainStructVol = (perimeter_m * gbWidth * gbHeight) + (netMatArea * matThick);
+                structDetails.main = mainStructVol;
+                structVol += mainStructVol;
+                
+                // 2. 되메우기 체적 = 지중보총길이 * 작업여유폭 * 지중보높이
+                backfillVol = perimeter_m * offset * gbHeight;
+            }
+
+            // 엘리베이터 피트 추가 반영 (피트는 구조물 및 터파기에 각각 추가됨)
+            let pitExcVol = 0;
+            pits.forEach((pit, idx) => {
+                let pArea_m2 = calculateArea(pit.points) / 1000000;
+                let pDepth_m = pit.depth / 1000; 
+                let pVol = pArea_m2 * pDepth_m;
+                
+                structVol += pVol;
+                pitExcVol += pVol;
+                structDetails.pit += pVol;
+                pitDetailsArr.push({ area: pArea_m2, depth: pDepth_m, vol: pVol });
+            });
+
+            // 3. 터파기 체적 = 구조물 체적 + 되메우기 체적
+            totalExcVol = structVol + backfillVol;
+
+            // 결과 객체 저장
+            calcDetails = {
+                matThick, gbWidth, gbHeight, offset,
+                area_m2, perimeter_m, 
+                structDetails, structVol, backfillVol, totalExcVol, pitExcVol, pitDetailsArr
+            };
+
+            // 결과 화면 업데이트
+            document.getElementById('resExcVolume').innerText = totalExcVol.toFixed(2);
+            document.getElementById('resStrVolume').innerText = structVol.toFixed(2);
+            document.getElementById('resBackfill').innerText = backfillVol.toFixed(2);
+        }
+
+        // --- 모달 로직 ---
+        function showModal(type) {
+            if (mainPolygon.length < 3) {
+                alert("도형을 완성한 후 산출식을 확인할 수 있습니다.");
+                return;
+            }
+
+            const modal = document.getElementById('calcModal');
+            const title = document.getElementById('modalTitle');
+            const content = document.getElementById('modalContent');
+            
+            let html = '';
+            const formatVal = (val) => val.toFixed(2);
+
+            if (type === 'structure') {
+                title.innerText = "구조물 체적 산출식 상세";
+                html += `<div class="mb-4">
+                    <strong class="text-gray-800 text-lg">총 구조물 체적: ${formatVal(calcDetails.structVol)} m³</strong>
+                </div>`;
+                
+                html += `<div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                    <div class="font-bold mb-2 border-b pb-1 text-gray-800">1. 주 구조물 (매트 + 지중보)</div>
+                    <ul class="list-disc pl-5 space-y-1 text-gray-700">
+                        <li>외곽 둘레(지중보 총길이): ${formatVal(calcDetails.perimeter_m)} m</li>
+                        <li>전체 면적: ${formatVal(calcDetails.area_m2)} m²</li>
+                        <li class="mt-2 text-gray-900"><strong>[지중보 체적]</strong><br>둘레(${formatVal(calcDetails.perimeter_m)}) × 너비(${calcDetails.gbWidth}) × 높이(${calcDetails.gbHeight}) = <strong>${formatVal(calcDetails.perimeter_m * calcDetails.gbWidth * calcDetails.gbHeight)} m³</strong></li>
+                        <li class="mt-2 text-gray-900"><strong>[매트 체적]</strong><br>순면적(${formatVal(calcDetails.structDetails.netMatArea)}) × 두께(${calcDetails.matThick}) = <strong>${formatVal(calcDetails.structDetails.netMatArea * calcDetails.matThick)} m³</strong>
+                            <div class="text-xs text-gray-500 mt-1">* 순면적 = 전체면적(${formatVal(calcDetails.area_m2)}) - 지중보면적(${formatVal(calcDetails.structDetails.gbArea)})</div>
+                        </li>
+                        <li class="mt-2 text-gray-800 font-semibold bg-gray-100 p-2 rounded">소계: ${formatVal(calcDetails.structDetails.main)} m³</li>
+                    </ul>
+                </div>`;
+
+                if (calcDetails.pitDetailsArr && calcDetails.pitDetailsArr.length > 0) {
+                    html += `<div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                        <div class="font-bold mb-2 border-b pb-1 text-gray-800">2. 엘리베이터 피트 추가 체적</div>
+                        <ul class="list-disc pl-5 space-y-1 text-gray-700">`;
+                    calcDetails.pitDetailsArr.forEach((pit, idx) => {
+                        html += `<li>PIT #${idx+1}: 면적(${formatVal(pit.area)}) × 내림깊이(${pit.depth}) = <strong>${formatVal(pit.vol)} m³</strong></li>`;
+                    });
+                    html += `<li class="mt-2 text-gray-800 font-semibold bg-gray-100 p-2 rounded">소계: ${formatVal(calcDetails.structDetails.pit)} m³</li>
+                        </ul>
+                    </div>`;
+                }
+            } else if (type === 'backfill') {
+                title.innerText = "되메우기 체적 산출식 상세";
+                html += `<div class="mb-4">
+                    <strong class="text-blue-600 text-lg">총 되메우기 체적: ${formatVal(calcDetails.backfillVol)} m³</strong>
+                </div>`;
+                
+                html += `<div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                    <div class="font-bold mb-2 border-b pb-1 text-gray-800">계산식</div>
+                    <ul class="list-disc pl-5 space-y-2 text-gray-700">
+                        <li>지중보 외곽 둘레: ${formatVal(calcDetails.perimeter_m)} m</li>
+                        <li>작업 여유폭: ${calcDetails.offset} m</li>
+                        <li>지중보 높이: ${calcDetails.gbHeight} m</li>
+                        <li class="mt-3 pt-3 border-t text-gray-900">
+                            <strong>[산출식]</strong><br>둘레(${formatVal(calcDetails.perimeter_m)}) × 여유폭(${calcDetails.offset}) × 높이(${calcDetails.gbHeight})<br>
+                            = <strong class="text-lg text-blue-600">${formatVal(calcDetails.backfillVol)} m³</strong>
+                        </li>
+                    </ul>
+                </div>`;
+            } else if (type === 'excavation') {
+                title.innerText = "터파기 체적 산출식 상세";
+                html += `<div class="mb-4">
+                    <strong class="text-red-600 text-lg">총 터파기 체적: ${formatVal(calcDetails.totalExcVol)} m³</strong>
+                </div>`;
+                
+                html += `<div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                    <div class="font-bold mb-2 border-b pb-1 text-gray-800">계산식 (구조물 체적 + 되메우기 체적)</div>
+                    <ul class="list-disc pl-5 space-y-2 text-gray-700">
+                        <li>구조물 체적: ${formatVal(calcDetails.structVol)} m³ <span class="text-xs text-gray-500">(피트 등 단차 포함)</span></li>
+                        <li>되메우기 체적: ${formatVal(calcDetails.backfillVol)} m³</li>
+                        <li class="mt-3 pt-3 border-t text-gray-900">
+                            <strong>[합계]</strong><br>
+                            <strong class="text-lg text-red-600">${formatVal(calcDetails.structVol)} + ${formatVal(calcDetails.backfillVol)} = ${formatVal(calcDetails.totalExcVol)} m³</strong>
+                        </li>
+                    </ul>
+                </div>`;
+            }
+
+            content.innerHTML = html;
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('calcModal').classList.add('hidden');
+        }
+
+        // --- 렌더링 로직 ---
+        function worldToScreen(x, y) {
+            return {
+                x: x * viewScale + viewOffsetX,
+                y: -y * viewScale + viewOffsetY // y축 반전 (수학 좌표계)
+            };
+        }
+
+        function drawPolygon(pts, fillStyle, strokeStyle, dashed = false) {
+            if(pts.length === 0) return;
+            ctx.beginPath();
+            let start = worldToScreen(pts[0].x, pts[0].y);
+            ctx.moveTo(start.x, start.y);
+            for (let i = 1; i < pts.length; i++) {
+                let sp = worldToScreen(pts[i].x, pts[i].y);
+                ctx.lineTo(sp.x, sp.y);
+            }
+            ctx.closePath();
+            
+            if(fillStyle) { ctx.fillStyle = fillStyle; ctx.fill(); }
+            if(dashed) ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
+            if(strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = 2; ctx.stroke(); }
+            ctx.setLineDash([]);
+        }
+
+        function draw() {
+            // 배경 초기화
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 그리드 그리기 (1000mm 간격)
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            const gridSize = 1000 * viewScale; 
+            
+            let startX = viewOffsetX % gridSize;
+            let startY = viewOffsetY % gridSize;
+
+            ctx.beginPath();
+            for (let x = startX; x < canvas.width; x += gridSize) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+            }
+            for (let y = startY; y < canvas.height; y += gridSize) {
+                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+            }
+            ctx.stroke();
+
+            // X, Y 원점 축
+            let origin = worldToScreen(0,0);
+            ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, canvas.height);
+            ctx.moveTo(0, origin.y); ctx.lineTo(canvas.width, origin.y);
+            ctx.stroke();
+
+            // 1. 메인 다각형 (기초)
+            if (mainPolygon.length > 0) {
+                // 터파기 여유선 가상 표시 (단순 시각화용 팽창 모방)
+                let offset = parseFloat(document.getElementById('workOffset').value) || 0;
+                // 정확한 Offset 렌더링은 복잡하므로 점들을 스케일링하여 임시 표시하거나, 영역으로만 표현.
+                // 여기서는 시각적 이해를 위해 외곽 여유폭을 사각형 Bounding Box 기준으로 그려줌 (개략)
+                drawPolygon(mainPolygon, 'rgba(59, 130, 246, 0.2)', '#2563eb'); 
+            }
+
+            // 2. 피트 다각형
+            pits.forEach(pit => {
+                drawPolygon(pit.points, 'rgba(249, 115, 22, 0.3)', '#ea580c');
+            });
+
+            // 3. 현재 그리고 있는 경로
+            if (currentPath.length > 0) {
+                let color = mode === 'main' ? '#2563eb' : '#ea580c';
+                ctx.beginPath();
+                let start = worldToScreen(0, 0);
+                if(currentPath.length > 0) start = worldToScreen(currentPath[0].x, currentPath[0].y);
+                ctx.moveTo(start.x, start.y);
+                for (let i = 1; i < currentPath.length; i++) {
+                    let sp = worldToScreen(currentPath[i].x, currentPath[i].y);
+                    ctx.lineTo(sp.x, sp.y);
+                }
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // 점 표시
+                currentPath.forEach(pt => {
+                    let sp = worldToScreen(pt.x, pt.y);
+                    ctx.beginPath();
+                    ctx.arc(sp.x, sp.y, 4, 0, Math.PI*2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                });
+            } else {
+                // 시작점 가이드
+                let sp = worldToScreen(0, 0);
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, 5, 0, Math.PI*2);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+            }
+        }
+
+        // 초기화 실행
+        setTimeout(resizeCanvas, 100);
+    </script>
+</body>
+</html>

@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마당포장 계산기</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
+        @media print {
+            .print-hidden { display: none !important; }
+            body { background-color: white !important; color: black; }
+            .shadow-xl, .shadow-sm, .shadow-inner { box-shadow: none !important; border: none !important; }
+            .bg-white { background-color: transparent !important; }
+            .max-w-6xl { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+            input { border: none !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+            table { border-collapse: collapse !important; width: 100% !important; }
+            th, td { border: 1px solid #000 !important; padding: 4px !important; }
+            /* 인쇄 시 페이지 나눔 방지 */
+            .page-break-inside-avoid { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans min-h-screen pb-10">
+
+    <div class="max-w-6xl mx-auto my-8 p-6 bg-white rounded-xl shadow-xl">
+        <!-- Header -->
+        <header class="bg-slate-800 text-white p-4 shadow-md flex justify-between items-center rounded-xl mb-8 print-hidden">
+            <div class="flex items-center gap-3">
+                <h1 class="text-xl font-bold"><i class="fa-solid fa-calculator mr-2"></i>마당포장 계산기</h1>
+                <!-- 매뉴얼 아이콘 버튼 -->
+                <button onclick="openManualModal()" class="text-gray-300 hover:text-white transition mt-1" title="사용 매뉴얼 보기">
+                    <i class="fa-solid fa-circle-info text-xl"></i>
+                </button>
+            </div>
+            <div>
+                <button onclick="openModal()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded shadow transition font-medium text-sm">
+                    <i class="fa-solid fa-gear"></i> 단가/설정 변경
+                </button>
+            </div>
+        </header>
+
+        <h1 class="hidden print:block text-2xl font-bold text-center mb-6">마당포장 공사대금 견적(예상)표</h1>
+
+        <!-- 입력부 -->
+        <div class="bg-blue-50 p-6 rounded-lg mb-4 border border-blue-100 flex flex-col md:flex-row gap-6 items-center">
+            <div class="flex-1 w-full">
+                <label class="block text-gray-700 font-bold mb-2 text-lg">예상 평수</label>
+                <div class="relative">
+                    <input type="number" id="inputPyeong" value="555.9345" class="w-full pl-4 pr-12 py-3 text-2xl font-bold text-right border border-gray-300 rounded shadow-inner focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    <span class="absolute right-4 top-4 text-gray-500 font-bold">평</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-center pt-8 print-hidden">
+                <svg class="w-8 h-8 text-blue-400 mx-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+            </div>
+            <div class="flex-1 w-full">
+                <label class="block text-gray-700 font-bold mb-2 text-lg">예상 면적</label>
+                <div class="relative">
+                    <input type="number" id="inputM2" class="w-full pl-4 pr-16 py-3 text-2xl font-bold text-right border border-gray-300 rounded shadow-inner focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    <span class="absolute right-4 top-4 text-gray-500 font-bold">M²</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1 text-right print-hidden">* 1평 = 3.3 M² 기준 자동 변환</p>
+            </div>
+        </div>
+
+        <!-- 작업일 입력부 및 총예상금액 (메인 UI) -->
+        <div class="bg-gray-50 p-6 rounded-lg mb-8 border border-gray-200 grid grid-cols-1 md:grid-cols-4 gap-6 items-stretch">
+            <!-- 아스콘 작업일 -->
+            <div class="w-full col-span-1">
+                <label class="block text-gray-700 font-bold mb-2 text-lg">아스콘 작업일 <span class="text-sm font-normal text-gray-500">(기본 1일)</span></label>
+                <div class="relative">
+                    <input type="number" id="main_ascon_days" value="1" min="1" class="w-full pl-4 pr-12 py-3 text-xl font-bold text-right border border-gray-300 rounded shadow-inner focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    <span class="absolute right-4 top-3.5 text-gray-500 font-bold">일</span>
+                </div>
+                <p class="text-sm text-red-500 mt-2 font-medium"><i class="fa-solid fa-circle-exclamation mr-1"></i>350톤이상 조정필요</p>
+            </div>
+            
+            <!-- 콘크리트 작업일 -->
+            <div class="w-full col-span-1">
+                <label class="block text-gray-700 font-bold mb-2 text-lg">콘크리트 작업일 <span class="text-sm font-normal text-gray-500">(기본 1일)</span></label>
+                <div class="relative">
+                    <input type="number" id="main_conc_days" value="1" min="1" class="w-full pl-4 pr-12 py-3 text-xl font-bold text-right border border-gray-300 rounded shadow-inner focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    <span class="absolute right-4 top-3.5 text-gray-500 font-bold">일</span>
+                </div>
+                <p class="text-sm text-red-500 mt-2 font-medium"><i class="fa-solid fa-circle-exclamation mr-1"></i>400평이상 조정필요</p>
+            </div>
+
+            <!-- 총 예상 금액 -->
+            <div class="w-full col-span-1 md:col-span-2 bg-blue-100 p-5 rounded-lg border border-blue-200 shadow-sm flex flex-col justify-center h-full">
+                <label class="block text-blue-900 font-bold mb-1 text-lg text-center">총 예상금액 <span class="text-sm font-normal text-blue-700">(아스콘+콘크리트)</span></label>
+                <div class="text-center text-4xl font-extrabold text-blue-700 mt-2" id="mainTotalCost">
+                    0<span class="text-2xl font-bold text-gray-600 ml-1">원</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+            <!-- Section 1: 아스콘 상세 내역 -->
+            <div class="page-break-inside-avoid">
+                <h2 class="text-xl font-bold mb-3 flex items-center gap-2">
+                    <span class="bg-blue-600 w-2 h-6 rounded"></span>
+                    □ 아스콘 포장 내역 <span class="text-sm font-normal text-gray-500">(실행 외주가)</span>
+                </h2>
+                <div class="overflow-x-auto border border-gray-300 rounded shadow-sm">
+                    <table class="w-full text-xs sm:text-sm text-center border-collapse">
+                        <thead class="bg-gray-100 text-gray-700">
+                            <tr>
+                                <th class="border-b border-r px-2 py-2 font-semibold">품명</th>
+                                <th class="border-b border-r px-2 py-2 font-semibold">구분</th>
+                                <th class="border-b border-r px-2 py-2 font-semibold">수량</th>
+                                <th class="border-b border-r px-2 py-2 font-semibold">단가(원)</th>
+                                <th class="border-b px-2 py-2 font-semibold">금액(원)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="asconTbody" class="bg-white"></tbody>
+                        <tfoot class="bg-gray-50">
+                            <tr>
+                                <td colspan="4" class="border-t border-r px-3 py-2 font-bold text-right">아스콘 소계</td>
+                                <td class="border-t px-3 py-2 font-extrabold text-blue-700 text-right" id="asconTotal">0</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 2: 콘크리트 상세 내역 -->
+            <div class="page-break-inside-avoid">
+                <h2 class="text-xl font-bold mb-3 flex items-center gap-2">
+                    <span class="bg-gray-600 w-2 h-6 rounded"></span>
+                    □ 콘크리트 포장 내역 <span class="text-sm font-normal text-gray-500">(실행 외주가)</span>
+                </h2>
+                <div class="overflow-x-auto border border-gray-300 rounded shadow-sm">
+                    <table class="w-full text-xs sm:text-sm text-center border-collapse">
+                        <thead class="bg-gray-100 text-gray-700">
+                            <tr>
+                                <th class="border-b border-r px-2 py-2 font-semibold">품명</th>
+                                <th class="border-b border-r px-2 py-2 font-semibold">구분</th>
+                                <th class="border-b border-r px-2 py-2 font-semibold">수량</th>
+                                <th class="border-b border-r px-2 py-2 font-semibold">단가(원)</th>
+                                <th class="border-b px-2 py-2 font-semibold">금액(원)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="concTbody" class="bg-white"></tbody>
+                        <tfoot class="bg-gray-50">
+                            <tr>
+                                <td colspan="4" class="border-t border-r px-3 py-2 font-bold text-right">콘크리트 소계</td>
+                                <td class="border-t px-3 py-2 font-extrabold text-gray-800 text-right" id="concTotal">0</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: 역산된 내역서 (평/M2 계산) -->
+        <div class="page-break-inside-avoid">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">
+                <span class="bg-green-600 w-2 h-6 rounded"></span>
+                □ 제출용 내역서 자동 산출 <span class="text-sm font-normal text-gray-500">[ 평(坪) 및 M² 역산 단가 ]</span>
+            </h2>
+            <div class="overflow-x-auto border border-gray-300 rounded shadow-sm">
+                <table class="w-full text-xs sm:text-sm text-center border-collapse">
+                    <thead class="bg-gray-100 text-gray-700">
+                        <tr>
+                            <th rowspan="2" class="border px-2 py-3 font-semibold">공종/품명</th>
+                            <th rowspan="2" class="border px-2 py-3 font-semibold">단위</th>
+                            <th rowspan="2" class="border px-2 py-3 font-semibold">수량</th>
+                            <th colspan="2" class="border px-2 py-1 font-semibold text-blue-800">재료비</th>
+                            <th colspan="2" class="border px-2 py-1 font-semibold text-green-800">노무비</th>
+                            <th colspan="2" class="border px-2 py-1 font-semibold text-yellow-800">경비 (장비대 포함)</th>
+                            <th colspan="2" class="border px-2 py-1 font-semibold bg-gray-200">합계</th>
+                        </tr>
+                        <tr>
+                            <th class="border px-1 py-1 font-medium text-[11px] text-blue-700">단가</th>
+                            <th class="border px-1 py-1 font-medium text-[11px] text-blue-700">금액</th>
+                            <th class="border px-1 py-1 font-medium text-[11px] text-green-700">단가</th>
+                            <th class="border px-1 py-1 font-medium text-[11px] text-green-700">금액</th>
+                            <th class="border px-1 py-1 font-medium text-[11px] text-yellow-700">단가</th>
+                            <th class="border px-1 py-1 font-medium text-[11px] text-yellow-700">금액</th>
+                            <th class="border px-1 py-1 font-bold text-[11px] bg-gray-200">단가</th>
+                            <th class="border px-1 py-1 font-bold text-[11px] bg-gray-200">금액</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reverseTbody" class="bg-white">
+                        <!-- JS 렌더링 영역 -->
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-500 mt-2 text-right">* 위 금액은 상세 내역의 합계를 평/M2 면적으로 역산하여 원단위 반올림한 금액입니다.</p>
+        </div>
+    </div>
+
+    <!-- 설정 및 단가 변경 모달 (팝업) -->
+    <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <!-- 모달 헤더 -->
+            <div class="flex justify-between items-center p-5 border-b">
+                <h2 class="text-2xl font-bold text-gray-800">단가 및 기본 정보 설정</h2>
+                <button onclick="closeModal()" class="text-gray-500 hover:text-red-500 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <!-- 모달 바디 (스크롤 영역) -->
+            <div class="p-6 overflow-y-auto flex-1 bg-gray-50">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    
+                    <!-- 왼쪽 열: 아스콘 설정 -->
+                    <div>
+                        <h3 class="font-extrabold text-xl mb-3 text-blue-800 border-b-2 border-blue-800 pb-2">아스콘 포장 설정</h3>
+                        
+                        <div class="bg-white p-4 rounded border shadow-sm mb-4">
+                            <h4 class="font-bold text-md mb-3 text-gray-700">기본 제원</h4>
+                            <div class="grid grid-cols-2 gap-3 text-sm">
+                                <div><label class="block mb-1">비중</label><input type="number" step="0.01" id="cfg_ascon_weight" class="w-full border p-1.5 rounded outline-none"></div>
+                                <div><label class="block mb-1">할증률 (배)</label><input type="number" step="0.01" id="cfg_ascon_surcharge" class="w-full border p-1.5 rounded outline-none"></div>
+                                <div><label class="block mb-1">두께 (mm)</label><input type="number" id="cfg_ascon_thickness" class="w-full border p-1.5 rounded outline-none"></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded border shadow-sm mb-4">
+                            <h4 class="font-bold text-md mb-3 text-gray-700">자재 단가</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center"><span class="w-24">아스콘(TON)</span><input type="number" id="cfg_p_ascon" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center"><span class="w-24">유제 소요(통)</span><input type="number" step="0.1" id="cfg_a_emulsion" class="flex-1 border p-1.5 rounded text-right"> 통</div>
+                                <div class="flex items-center"><span class="w-24">유제 단가</span><input type="number" id="cfg_p_emulsion" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded border shadow-sm mb-4">
+                            <h4 class="font-bold text-md mb-3 text-gray-700">장비/노무 단가 (1일 기준)</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center"><span class="w-24">바브켓</span><input type="number" id="cfg_p_bobcat" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center"><span class="w-24">10T로라</span><input type="number" id="cfg_p_roller10t" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center"><span class="w-24">비후다</span><input type="number" id="cfg_p_vihuda" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center"><span class="w-24">타이어로라</span><input type="number" id="cfg_p_tire_roller" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center"><span class="w-24">휘니셔</span><input type="number" id="cfg_p_finisher" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center mt-2 border-t pt-2">
+                                    <span class="w-16">포장공</span>
+                                    <input type="number" id="cfg_a_paving" class="w-12 border p-1 rounded text-center mx-1" title="인원">명
+                                    <input type="number" id="cfg_p_paving" class="flex-1 border p-1.5 rounded text-right ml-2" title="단가"> 원
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="w-16">보통인부</span>
+                                    <input type="number" id="cfg_a_normal" class="w-12 border p-1 rounded text-center mx-1" title="인원">명
+                                    <input type="number" id="cfg_p_normal" class="flex-1 border p-1.5 rounded text-right ml-2" title="단가"> 원
+                                </div>
+                                <div class="flex items-center border-t pt-2"><span class="w-24">공과잡비</span><input type="number" id="cfg_p_misc" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 오른쪽 열: 콘크리트 설정 -->
+                    <div>
+                        <h3 class="font-extrabold text-xl mb-3 text-gray-700 border-b-2 border-gray-700 pb-2">콘크리트 포장 설정</h3>
+                        
+                        <div class="bg-white p-4 rounded border shadow-sm mb-4">
+                            <h4 class="font-bold text-md mb-3 text-gray-700">기본 제원</h4>
+                            <div class="grid grid-cols-2 gap-3 text-sm">
+                                <div><label class="block mb-1">두께 (mm)</label><input type="number" id="cfg_conc_thickness" class="w-full border p-1.5 rounded outline-none"></div>
+                                <div><label class="block mb-1">할증률 (배)</label><input type="number" step="0.01" id="cfg_conc_surcharge" class="w-full border p-1.5 rounded outline-none"></div>
+                                <div><label class="block mb-1">와이어메쉬(M²당)</label><input type="number" step="0.01" id="cfg_a_wiremesh" class="w-full border p-1.5 rounded outline-none" title="M2당 들어가는 장수 비율"></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded border shadow-sm mb-4">
+                            <h4 class="font-bold text-md mb-3 text-gray-700">자재 단가</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center"><span class="w-24">레미콘(M3)</span><input type="number" id="cfg_p_remicon" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center"><span class="w-24">와이어메쉬(장)</span><input type="number" id="cfg_p_wiremesh" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded border shadow-sm mb-4">
+                            <h4 class="font-bold text-md mb-3 text-gray-700">장비/노무 단가 (1일 기준)</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center"><span class="w-24">펌프카</span><input type="number" id="cfg_p_pumpcar" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center"><span class="w-24">미니포크레인</span><input type="number" id="cfg_p_excavator" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                                <div class="flex items-center mt-2 border-t pt-2">
+                                    <span class="w-16">타설공</span>
+                                    <input type="number" id="cfg_a_conc_paving" class="w-12 border p-1 rounded text-center mx-1" title="인원">명
+                                    <input type="number" id="cfg_p_conc_paving" class="flex-1 border p-1.5 rounded text-right ml-2" title="단가"> 원
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="w-16">보통인부</span>
+                                    <input type="number" id="cfg_a_conc_normal" class="w-12 border p-1 rounded text-center mx-1" title="인원">명
+                                    <input type="number" id="cfg_p_conc_normal" class="flex-1 border p-1.5 rounded text-right ml-2" title="단가"> 원
+                                </div>
+                                <div class="flex items-center border-t pt-2"><span class="w-24">공과잡비</span><input type="number" id="cfg_p_conc_misc" class="flex-1 border p-1.5 rounded text-right"> 원</div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- 모달 푸터 -->
+            <div class="p-4 border-t bg-white flex justify-end gap-3 rounded-b-xl">
+                <button onclick="closeModal()" class="px-5 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 transition font-medium">취소</button>
+                <button onclick="saveSettings()" class="px-5 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 transition font-medium">저장 및 계산 적용</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 매뉴얼 모달 (팝업) -->
+    <div id="manualModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center p-5 border-b">
+                <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    마당포장 계산기 사용 매뉴얼
+                </h2>
+                <button onclick="closeManualModal()" class="text-gray-500 hover:text-red-500 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 bg-gray-50 text-gray-700 space-y-4">
+                <div class="bg-white p-4 rounded border border-gray-200 shadow-sm">
+                    <h3 class="font-bold text-lg text-blue-800 mb-2">1. 예상 면적 입력</h3>
+                    <p class="text-sm leading-relaxed">상단의 <strong>예상 평수</strong> 또는 <strong>예상 면적(M²)</strong> 입력칸에 원하는 숫자를 입력하세요. 평수와 M²는 1평 = 3.3M² 기준으로 양방향 자동 변환됩니다.</p>
+                </div>
+                <div class="bg-white p-4 rounded border border-gray-200 shadow-sm">
+                    <h3 class="font-bold text-lg text-blue-800 mb-2">2. 실행 외주가 확인 (상세 내역)</h3>
+                    <p class="text-sm leading-relaxed">입력된 면적을 바탕으로 아스콘/콘크리트 포장에 필요한 자재물량, 장비, 노무비가 즉시 계산되어 중간 표에 표시됩니다. (수량 × 단가)</p>
+                </div>
+                <div class="bg-white p-4 rounded border border-gray-200 shadow-sm">
+                    <h3 class="font-bold text-lg text-blue-800 mb-2">3. 단가 및 기본 설정 변경</h3>
+                    <p class="text-sm leading-relaxed">우측 상단의 <strong>[단가/설정 변경]</strong> 버튼을 누르시면 자재비, 장비비, 투입 인원, 할증률 등을 현장 상황에 맞게 직접 수정할 수 있습니다.</p>
+                </div>
+                <div class="bg-white p-4 rounded border border-gray-200 shadow-sm">
+                    <h3 class="font-bold text-lg text-blue-800 mb-2">4. 제출용 내역서 (평/M² 역산)</h3>
+                    <p class="text-sm leading-relaxed">맨 아래의 자동 산출 표는 총 실행금액을 면적으로 다시 나누어(역산), 실제 관공서나 고객에게 제출하기 좋은 <strong>단위 면적당 단가표</strong>를 제공합니다.</p>
+                </div>
+            </div>
+            <div class="p-4 border-t bg-white flex justify-end rounded-b-xl">
+                <button onclick="closeManualModal()" class="px-5 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 transition font-medium">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 상태 (초기 기본값)
+        let state = {
+            pyeong: 555.9345,
+            m2: 555.9345 * 3.3,
+            config: {
+                // 아스콘 설정
+                ascon: {
+                    weight: 2.32,
+                    surcharge: 1.05,
+                    thickness: 50,
+                    days: 1,
+                    prices: {
+                        ascon: 90000, emulsion: 120000,
+                        bobcat: 650000, roller10t: 700000, vihuda: 700000, tire_roller: 700000, finisher: 1100000,
+                        paving_worker: 250000, normal_worker: 170000, misc_expense: 2500000
+                    },
+                    amounts: {
+                        emulsion: 1.5, paving_worker: 5, normal_worker: 2,
+                        bobcat: 1, roller10t: 1, vihuda: 1, tire_roller: 1, finisher: 1, misc_expense: 1
+                    }
+                },
+                // 콘크리트 설정
+                conc: {
+                    thickness: 100,
+                    surcharge: 1.05,
+                    days: 1,
+                    prices: {
+                        remicon: 105000, wiremesh: 4000,
+                        pumpcar: 800000, excavator: 500000,
+                        paving_worker: 250000, normal_worker: 170000, misc_expense: 500000
+                    },
+                    amounts: {
+                        wiremesh_ratio: 0.5, // M2당 0.5장 가정 (필요시 조정)
+                        paving_worker: 4, normal_worker: 1,
+                        pumpcar: 1, excavator: 0, misc_expense: 1
+                    }
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initInputs();
+            render();
+            populateModalInputs();
+        });
+
+        // 콤마 포맷터
+        function formatNumber(num, decimals = 0) {
+            if (num === null || isNaN(num)) return '0';
+            let p = parseFloat(num).toFixed(decimals);
+            if (decimals > 0) p = parseFloat(p).toString(); 
+            const parts = p.split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            return parts.join('.');
+        }
+
+        function initInputs() {
+            const elPyeong = document.getElementById('inputPyeong');
+            const elM2 = document.getElementById('inputM2');
+            const elAsconDays = document.getElementById('main_ascon_days');
+            const elConcDays = document.getElementById('main_conc_days');
+
+            elAsconDays.value = state.config.ascon.days;
+            elConcDays.value = state.config.conc.days;
+
+            elPyeong.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value) || 0;
+                state.pyeong = val;
+                state.m2 = val * 3.3;
+                elM2.value = Number.isInteger(state.m2) ? state.m2 : state.m2.toFixed(2);
+                render();
+            });
+
+            elM2.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value) || 0;
+                state.m2 = val;
+                state.pyeong = val / 3.3;
+                elPyeong.value = Number.isInteger(state.pyeong) ? state.pyeong : state.pyeong.toFixed(4);
+                render();
+            });
+
+            elAsconDays.addEventListener('input', (e) => {
+                let val = parseInt(e.target.value) || 1;
+                state.config.ascon.days = val;
+                render();
+            });
+
+            elConcDays.addEventListener('input', (e) => {
+                let val = parseInt(e.target.value) || 1;
+                state.config.conc.days = val;
+                render();
+            });
+        }
+
+        // --- 계산 로직 핵심부 ---
+        function calculateItems() {
+            const cAsc = state.config.ascon;
+            const cCon = state.config.conc;
+            
+            // 1. 아스콘 수량(TON)
+            const ascon_ton = Math.round(state.m2 * cAsc.weight * (cAsc.thickness / 1000) * cAsc.surcharge);
+            
+            // 2. 레미콘 수량(M3)
+            const remicon_m3 = Math.round(state.m2 * (cCon.thickness / 1000) * cCon.surcharge);
+            const wiremesh_qty = Math.round(state.m2 * cCon.amounts.wiremesh_ratio);
+
+            const asconItems = [
+                { name: '아스콘(#78)', category: '자재', qty: ascon_ton, price: cAsc.prices.ascon, mat: true },
+                { name: '바브켓', category: '장비', qty: cAsc.amounts.bobcat * cAsc.days, price: cAsc.prices.bobcat, exp: true },
+                { name: '10T로라', category: '장비', qty: cAsc.amounts.roller10t * cAsc.days, price: cAsc.prices.roller10t, exp: true },
+                { name: '비후다', category: '장비', qty: cAsc.amounts.vihuda * cAsc.days, price: cAsc.prices.vihuda, exp: true },
+                { name: '타이어로라', category: '장비', qty: cAsc.amounts.tire_roller * cAsc.days, price: cAsc.prices.tire_roller, exp: true },
+                { name: '휘니셔', category: '장비', qty: cAsc.amounts.finisher * cAsc.days, price: cAsc.prices.finisher, exp: true },
+                { name: '유제(RSC-4)', category: '자재', qty: cAsc.amounts.emulsion, price: cAsc.prices.emulsion, mat: true },
+                { name: '포장공', category: '노무', qty: cAsc.amounts.paving_worker * cAsc.days, price: cAsc.prices.paving_worker, nom: true },
+                { name: '보통인부', category: '노무', qty: cAsc.amounts.normal_worker * cAsc.days, price: cAsc.prices.normal_worker, nom: true },
+                { name: '공과잡비', category: '경비', qty: cAsc.amounts.misc_expense * cAsc.days, price: cAsc.prices.misc_expense, exp: true }
+            ];
+
+            const concItems = [
+                { name: '레미콘(M3)', category: '자재', qty: remicon_m3, price: cCon.prices.remicon, mat: true },
+                { name: '와이어메쉬(장)', category: '자재', qty: wiremesh_qty, price: cCon.prices.wiremesh, mat: true },
+                { name: '펌프카', category: '장비', qty: cCon.amounts.pumpcar * cCon.days, price: cCon.prices.pumpcar, exp: true },
+                { name: '미니포크레인', category: '장비', qty: cCon.amounts.excavator * cCon.days, price: cCon.prices.excavator, exp: true },
+                { name: '타설공', category: '노무', qty: cCon.amounts.paving_worker * cCon.days, price: cCon.prices.paving_worker, nom: true },
+                { name: '보통인부', category: '노무', qty: cCon.amounts.normal_worker * cCon.days, price: cCon.prices.normal_worker, nom: true },
+                { name: '공과잡비', category: '경비', qty: cCon.amounts.misc_expense * cCon.days, price: cCon.prices.misc_expense, exp: true }
+            ];
+
+            return { asconItems, concItems };
+        }
+
+        function renderTableRows(items, tbodyId) {
+            let html = '';
+            let sums = { mat: 0, nom: 0, exp: 0, total: 0 };
+            
+            items.forEach(item => {
+                const amt = item.qty * item.price;
+                sums.total += amt;
+                if(item.mat) sums.mat += amt;
+                if(item.nom) sums.nom += amt;
+                if(item.exp) sums.exp += amt;
+
+                html += `
+                    <tr class="hover:bg-gray-50 border-b border-gray-200">
+                        <td class="border-r px-2 py-1.5 text-left">${item.name}</td>
+                        <td class="border-r px-2 py-1.5 text-gray-500">${item.category}</td>
+                        <td class="border-r px-2 py-1.5 text-right">${formatNumber(item.qty, item.qty % 1 !== 0 ? 1 : 0)}</td>
+                        <td class="border-r px-2 py-1.5 text-right">${formatNumber(item.price)}</td>
+                        <td class="px-2 py-1.5 text-right font-medium">${formatNumber(amt)}</td>
+                    </tr>
+                `;
+            });
+            document.getElementById(tbodyId).innerHTML = html;
+            return sums;
+        }
+
+        function render() {
+            const { asconItems, concItems } = calculateItems();
+
+            const asconSums = renderTableRows(asconItems, 'asconTbody');
+            document.getElementById('asconTotal').innerText = formatNumber(asconSums.total);
+
+            const concSums = renderTableRows(concItems, 'concTbody');
+            document.getElementById('concTotal').innerText = formatNumber(concSums.total);
+
+            // 3. 총 예상금액 업데이트
+            const totalEstimatedCost = asconSums.total + concSums.total;
+            document.getElementById('mainTotalCost').innerHTML = `${formatNumber(totalEstimatedCost)}<span class="text-2xl font-bold text-gray-600 ml-1">원</span>`;
+
+            // 4. 내역서 렌더링 (평/M2 역산)
+            const pyeong = state.pyeong > 0 ? state.pyeong : 1;
+            const m2 = state.m2 > 0 ? state.m2 : 1;
+            const cAsc = state.config.ascon;
+            const cCon = state.config.conc;
+
+            let revHTML = '';
+
+            // 헬퍼: 행 생성기
+            const makeRow = (title, unitName, areaVal, sums, thickness, isM2, bgColor) => {
+                const mat_u = Math.round(sums.mat / areaVal);
+                const nom_u = Math.round(sums.nom / areaVal);
+                const exp_u = Math.round(sums.exp / areaVal);
+                const tot_u = mat_u + nom_u + exp_u;
+
+                const mat_a = mat_u * areaVal;
+                const nom_a = nom_u * areaVal;
+                const exp_a = exp_u * areaVal;
+                const tot_a = tot_u * areaVal;
+
+                return `
+                    <tr class="bg-white hover:bg-gray-50 border-b">
+                        <td class="border px-2 py-2 text-left font-medium ${isM2 ? 'pl-6 text-gray-500' : 'text-gray-800'}">
+                            ${isM2 ? '└ [M²환산]' : title} ${isM2 ? '' : '<span class="text-xs text-gray-400 block">T='+thickness+'</span>'}
+                        </td>
+                        <td class="border px-2 py-2 text-center text-gray-600">${unitName}</td>
+                        <td class="border px-2 py-2 text-right font-bold text-gray-700">${formatNumber(areaVal, isM2 ? 2 : 4)}</td>
+                        <td class="border px-1 py-2 text-right text-blue-700">${formatNumber(mat_u)}</td>
+                        <td class="border px-1 py-2 text-right">${formatNumber(mat_a)}</td>
+                        <td class="border px-1 py-2 text-right text-green-700">${formatNumber(nom_u)}</td>
+                        <td class="border px-1 py-2 text-right">${formatNumber(nom_a)}</td>
+                        <td class="border px-1 py-2 text-right text-yellow-700">${formatNumber(exp_u)}</td>
+                        <td class="border px-1 py-2 text-right">${formatNumber(exp_a)}</td>
+                        <td class="border px-1 py-2 text-right font-bold ${bgColor}">${formatNumber(tot_u)}</td>
+                        <td class="border px-1 py-2 text-right font-extrabold text-red-600 ${bgColor}">${formatNumber(tot_a)}</td>
+                    </tr>
+                `;
+            };
+
+            // 아스콘 내역 (순서 변경: 아스콘 먼저)
+            revHTML += makeRow('아스콘 포설', '평', pyeong, asconSums, cAsc.thickness, false, 'bg-gray-100');
+            revHTML += makeRow('아스콘 포설', 'M²', m2, asconSums, cAsc.thickness, true, 'bg-gray-50');
+            // 콘크리트 내역
+            revHTML += makeRow('콘크리트 타설', '평', pyeong, concSums, cCon.thickness, false, 'bg-gray-100');
+            revHTML += makeRow('콘크리트 타설', 'M²', m2, concSums, cCon.thickness, true, 'bg-gray-50');
+
+            document.getElementById('reverseTbody').innerHTML = revHTML;
+        }
+
+        // --- 매뉴얼 모달 제어 ---
+        function openManualModal() {
+            document.getElementById('manualModal').classList.remove('hidden');
+        }
+        function closeManualModal() {
+            document.getElementById('manualModal').classList.add('hidden');
+        }
+
+        // --- 단가/설정 모달 제어 ---
+        function openModal() {
+            populateModalInputs();
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+        function closeModal() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function populateModalInputs() {
+            const cA = state.config.ascon;
+            const cC = state.config.conc;
+            
+            // Ascon
+            document.getElementById('cfg_ascon_weight').value = cA.weight;
+            document.getElementById('cfg_ascon_surcharge').value = cA.surcharge;
+            document.getElementById('cfg_ascon_thickness').value = cA.thickness;
+            document.getElementById('cfg_p_ascon').value = cA.prices.ascon;
+            document.getElementById('cfg_a_emulsion').value = cA.amounts.emulsion;
+            document.getElementById('cfg_p_emulsion').value = cA.prices.emulsion;
+            document.getElementById('cfg_p_bobcat').value = cA.prices.bobcat;
+            document.getElementById('cfg_p_roller10t').value = cA.prices.roller10t;
+            document.getElementById('cfg_p_vihuda').value = cA.prices.vihuda;
+            document.getElementById('cfg_p_tire_roller').value = cA.prices.tire_roller;
+            document.getElementById('cfg_p_finisher').value = cA.prices.finisher;
+            document.getElementById('cfg_a_paving').value = cA.amounts.paving_worker;
+            document.getElementById('cfg_p_paving').value = cA.prices.paving_worker;
+            document.getElementById('cfg_a_normal').value = cA.amounts.normal_worker;
+            document.getElementById('cfg_p_normal').value = cA.prices.normal_worker;
+            document.getElementById('cfg_p_misc').value = cA.prices.misc_expense;
+
+            // Concrete
+            document.getElementById('cfg_conc_thickness').value = cC.thickness;
+            document.getElementById('cfg_conc_surcharge').value = cC.surcharge;
+            document.getElementById('cfg_a_wiremesh').value = cC.amounts.wiremesh_ratio;
+            document.getElementById('cfg_p_remicon').value = cC.prices.remicon;
+            document.getElementById('cfg_p_wiremesh').value = cC.prices.wiremesh;
+            document.getElementById('cfg_p_pumpcar').value = cC.prices.pumpcar;
+            document.getElementById('cfg_p_excavator').value = cC.prices.excavator;
+            document.getElementById('cfg_a_conc_paving').value = cC.amounts.paving_worker;
+            document.getElementById('cfg_p_conc_paving').value = cC.prices.paving_worker;
+            document.getElementById('cfg_a_conc_normal').value = cC.amounts.normal_worker;
+            document.getElementById('cfg_p_conc_normal').value = cC.prices.normal_worker;
+            document.getElementById('cfg_p_conc_misc').value = cC.prices.misc_expense;
+        }
+
+        function saveSettings() {
+            const cA = state.config.ascon;
+            const cC = state.config.conc;
+            
+            // Ascon
+            cA.weight = Number(document.getElementById('cfg_ascon_weight').value) || 0;
+            cA.surcharge = Number(document.getElementById('cfg_ascon_surcharge').value) || 0;
+            cA.thickness = Number(document.getElementById('cfg_ascon_thickness').value) || 0;
+            cA.prices.ascon = Number(document.getElementById('cfg_p_ascon').value) || 0;
+            cA.amounts.emulsion = Number(document.getElementById('cfg_a_emulsion').value) || 0;
+            cA.prices.emulsion = Number(document.getElementById('cfg_p_emulsion').value) || 0;
+            cA.prices.bobcat = Number(document.getElementById('cfg_p_bobcat').value) || 0;
+            cA.prices.roller10t = Number(document.getElementById('cfg_p_roller10t').value) || 0;
+            cA.prices.vihuda = Number(document.getElementById('cfg_p_vihuda').value) || 0;
+            cA.prices.tire_roller = Number(document.getElementById('cfg_p_tire_roller').value) || 0;
+            cA.prices.finisher = Number(document.getElementById('cfg_p_finisher').value) || 0;
+            cA.amounts.paving_worker = Number(document.getElementById('cfg_a_paving').value) || 0;
+            cA.prices.paving_worker = Number(document.getElementById('cfg_p_paving').value) || 0;
+            cA.amounts.normal_worker = Number(document.getElementById('cfg_a_normal').value) || 0;
+            cA.prices.normal_worker = Number(document.getElementById('cfg_p_normal').value) || 0;
+            cA.prices.misc_expense = Number(document.getElementById('cfg_p_misc').value) || 0;
+
+            // Concrete
+            cC.thickness = Number(document.getElementById('cfg_conc_thickness').value) || 0;
+            cC.surcharge = Number(document.getElementById('cfg_conc_surcharge').value) || 0;
+            cC.amounts.wiremesh_ratio = Number(document.getElementById('cfg_a_wiremesh').value) || 0;
+            cC.prices.remicon = Number(document.getElementById('cfg_p_remicon').value) || 0;
+            cC.prices.wiremesh = Number(document.getElementById('cfg_p_wiremesh').value) || 0;
+            cC.prices.pumpcar = Number(document.getElementById('cfg_p_pumpcar').value) || 0;
+            cC.prices.excavator = Number(document.getElementById('cfg_p_excavator').value) || 0;
+            cC.amounts.paving_worker = Number(document.getElementById('cfg_a_conc_paving').value) || 0;
+            cC.prices.paving_worker = Number(document.getElementById('cfg_p_conc_paving').value) || 0;
+            cC.amounts.normal_worker = Number(document.getElementById('cfg_a_conc_normal').value) || 0;
+            cC.prices.normal_worker = Number(document.getElementById('cfg_p_conc_normal').value) || 0;
+            cC.prices.misc_expense = Number(document.getElementById('cfg_p_conc_misc').value) || 0;
+
+            closeModal();
+            render();
+        }
+    </script>
+</body>
+</html>
