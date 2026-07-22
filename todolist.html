@@ -148,16 +148,23 @@
                 <textarea id="editTaskInput" class="w-full border border-slate-300 rounded-lg px-4 py-2.5 h-28 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"></textarea>
             </div>
             
-            <div class="flex justify-end gap-3">
-                <button onclick="closeModal()" class="px-5 py-2.5 rounded-lg text-slate-600 font-medium hover:bg-slate-100 transition-colors">취소</button>
-                <button onclick="saveEdit()" class="px-5 py-2.5 theme-bg-blue text-white rounded-lg font-medium hover:bg-blue-900 transition-colors shadow-sm">변경사항 저장</button>
+            <!-- 수정됨: 하단 영역을 flex로 나누어 좌측엔 시간 정보, 우측엔 버튼 배치 -->
+            <div class="flex justify-between items-end mt-4">
+                <div class="text-[11px] text-slate-400 space-y-1">
+                    <div id="editTaskCreatedAt"></div>
+                    <div id="editTaskUpdatedAt"></div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="closeModal()" class="px-5 py-2.5 rounded-lg text-slate-600 font-medium hover:bg-slate-100 transition-colors">취소</button>
+                    <button onclick="saveEdit()" class="px-5 py-2.5 theme-bg-blue text-white rounded-lg font-medium hover:bg-blue-900 transition-colors shadow-sm">변경사항 저장</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- 탭 요약 보기 모달 -->
+    <!-- 탭 요약 보기 모달 (수정: 너비를 max-w-lg 에서 max-w-3xl 로 넓힘) -->
     <div id="summaryModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg m-4 transform transition-all flex flex-col max-h-[80vh]">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-3xl m-4 transform transition-all flex flex-col max-h-[80vh]">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
                 <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                     <i data-lucide="list-todo" class="w-5 h-5 theme-text-blue"></i>
@@ -266,6 +273,21 @@
         
         let unsubscribeTasks = null;
         let unsubscribeSites = null;
+
+        // 💡 [신규] 날짜 포맷팅 함수 (ISO 문자열 -> YYYY-MM-DD HH:mm)
+        function formatDate(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return '-'; // 유효하지 않은 날짜 처리
+            
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            
+            return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+        }
 
         // ---------------------------------------------------------
         // 인증(Auth) 및 화이트리스트 검증 로직
@@ -644,6 +666,11 @@
             document.getElementById('editTaskId').value = task.id;
             document.getElementById('editSiteInput').value = task.site;
             document.getElementById('editTaskInput').value = task.title;
+            
+            // 💡 [신규] 시간 정보 모달에 채우기
+            document.getElementById('editTaskCreatedAt').innerHTML = `최초 작성: ${formatDate(task.createdAt)}`;
+            document.getElementById('editTaskUpdatedAt').innerHTML = `최종 수정: ${formatDate(task.updatedAt)}`;
+            
             document.getElementById('editModal').classList.remove('hidden');
             document.getElementById('editTaskInput').focus();
         };
@@ -683,18 +710,45 @@
 
                 Object.keys(grouped).sort().forEach(site => {
                     const siteDiv = document.createElement('div');
-                    siteDiv.className = 'mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100';
-                    siteDiv.innerHTML = `<h3 class="font-bold theme-text-green mb-2 flex items-center gap-1 text-sm border-b pb-1"><i data-lucide="building" class="w-4 h-4"></i> ${site} <span class="text-slate-400 text-xs font-normal ml-1">(${grouped[site].length}건)</span></h3>`;
+                    siteDiv.className = 'mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm';
+                    siteDiv.innerHTML = `<h3 class="font-bold theme-text-green mb-3 flex items-center gap-1.5 text-base border-b pb-2"><i data-lucide="building" class="w-5 h-5"></i> ${site} <span class="text-slate-400 text-xs font-normal ml-1">(${grouped[site].length}건)</span></h3>`;
                     
-                    const ul = document.createElement('ul');
-                    ul.className = 'list-disc list-inside space-y-1 text-sm text-slate-700 ml-1';
+                    // 💡 [수정] 테이블 구조로 변경
+                    const tableWrap = document.createElement('div');
+                    tableWrap.className = 'overflow-x-auto';
+                    
+                    const table = document.createElement('table');
+                    table.className = 'w-full text-sm text-left text-slate-600';
+                    
+                    // 테이블 헤더
+                    const thead = document.createElement('thead');
+                    thead.className = 'text-xs text-slate-400 uppercase bg-slate-100/50 border-b border-slate-200';
+                    thead.innerHTML = `
+                        <tr>
+                            <th scope="col" class="px-3 py-2.5 font-semibold">업무 내용</th>
+                            <th scope="col" class="px-3 py-2.5 w-32 font-semibold text-center whitespace-nowrap">최초 작성일</th>
+                            <th scope="col" class="px-3 py-2.5 w-32 font-semibold text-center whitespace-nowrap">최종 수정일</th>
+                        </tr>
+                    `;
+                    table.appendChild(thead);
+                    
+                    // 테이블 본문
+                    const tbody = document.createElement('tbody');
                     grouped[site].forEach(task => {
-                        const li = document.createElement('li');
-                        li.textContent = task.title;
-                        ul.appendChild(li);
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b border-slate-100 last:border-0 hover:bg-slate-100/50 transition-colors';
+                        
+                        tr.innerHTML = `
+                            <td class="px-3 py-2.5 text-slate-800 break-words font-medium">${task.title}</td>
+                            <td class="px-3 py-2.5 text-xs text-slate-500 text-center whitespace-nowrap">${formatDate(task.createdAt)}</td>
+                            <td class="px-3 py-2.5 text-xs text-slate-500 text-center whitespace-nowrap">${formatDate(task.updatedAt)}</td>
+                        `;
+                        tbody.appendChild(tr);
                     });
                     
-                    siteDiv.appendChild(ul);
+                    table.appendChild(tbody);
+                    tableWrap.appendChild(table);
+                    siteDiv.appendChild(tableWrap);
                     contentEl.appendChild(siteDiv);
                 });
             }
